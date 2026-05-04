@@ -1,0 +1,6 @@
+{
+  "name": "Space Survival",
+  "description": "A top-down 2D space shooter where a lone cyan fighter defends against the relentless Kla'ed armada. Features Kardashev Civilization modes, dodging asteroids, parallax starfields, and robust AI scheduling strategies (FCFS, RR, HRRN) for dynamic wave generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
