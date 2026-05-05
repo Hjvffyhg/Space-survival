@@ -6,69 +6,42 @@ const MenuButton = ({
   onClick, 
   title, 
   locked = false,
-  color = 'cyan'
+  spriteIndex = 0
 }: { 
   className?: string, 
   onClick?: () => void, 
   title: string, 
   locked?: boolean,
-  color?: 'cyan' | 'indigo' | 'rose'
+  spriteIndex?: number
 }) => {
-  const colors = {
-    cyan: {
-      shadow: 'hover:shadow-[0_0_20px_rgba(0,217,255,0.4)]',
-      border: 'group-hover:border-[#00D9FF]/60',
-      accent: 'group-hover:border-[#00D9FF]',
-      glow: 'via-[#00D9FF]/40',
-      bgHover: 'hover:bg-[#00D9FF]/10'
-    },
-    indigo: {
-      shadow: 'hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]',
-      border: 'group-hover:border-indigo-500/60',
-      accent: 'group-hover:border-indigo-400',
-      glow: 'via-indigo-500/40',
-      bgHover: 'hover:bg-indigo-500/10'
-    },
-    rose: {
-      shadow: 'hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]',
-      border: 'group-hover:border-rose-500/60',
-      accent: 'group-hover:border-rose-400',
-      glow: 'via-rose-500/40',
-      bgHover: 'hover:bg-rose-500/10'
-    }
-  };
-
-  const c = colors[color];
+  // 4 buttons vertically stacked in Buttons.png
+  // percentages for 4 items: 0%, 33.333%, 66.666%, 100%
+  const bgPosY = spriteIndex * 33.3333;
 
   return (
     <button
       onClick={!locked ? onClick : undefined}
       className={cn(
-        "absolute group overflow-hidden transition-all duration-300 rounded",
-        className,
-        locked ? "cursor-not-allowed" : `cursor-pointer ${c.shadow} hover:scale-[1.01] active:scale-[0.99] ${c.bgHover}`
+        "relative group transition-all duration-200",
+        "w-[180px] h-[45px] md:w-[200px] md:h-[50px]", // Compress size
+        locked ? "cursor-not-allowed opacity-50 grayscale" : "cursor-pointer hover:scale-105 active:scale-95 hover:brightness-110 drop-shadow-xl",
+        className
       )}
       title={title}
       aria-label={title}
     >
-      {!locked && (
-         <>
-           {/* Scanline Gradient */}
-           <div className={cn("absolute inset-0 bg-gradient-to-r from-transparent to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out", c.glow)} />
-           
-           {/* Border box */}
-           <div className={cn("absolute inset-0 border border-transparent transition-colors duration-300 rounded", c.border)} />
-           
-           {/* Sci-fi corner brackets */}
-           <div className={cn("absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-transparent transition-all duration-300 -translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0", c.accent)} />
-           <div className={cn("absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-transparent transition-all duration-300 translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0", c.accent)} />
-           <div className={cn("absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-transparent transition-all duration-300 -translate-x-2 translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0", c.accent)} />
-           <div className={cn("absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-transparent transition-all duration-300 translate-x-2 translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0", c.accent)} />
-         </>
-      )}
+      <div 
+        className="absolute inset-0 bg-no-repeat bg-[length:100%_400%]"
+        style={{ 
+          backgroundImage: 'url(/assets/Buttons.png)',
+          backgroundPosition: `0% ${bgPosY}%`,
+          imageRendering: 'pixelated'
+        }}
+      />
+      
       {locked && (
-         <div className="absolute inset-0 border border-transparent hover:border-slate-500/30 rounded transition-colors bg-slate-900/40 opacity-0 hover:opacity-100 flex items-center justify-center backdrop-blur-[1px]">
-           <span className="text-[10px] font-mono text-slate-400/80 tracking-widest px-2 py-1 bg-slate-900/80 rounded border border-slate-700/50">LOCKED</span>
+         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+           <span className="text-sm font-mono text-white tracking-widest px-2 py-1 bg-red-950 border-2 border-red-600 shadow-[2px_2px_0px_#7f1d1d]">LOCKED</span>
          </div>
       )}
     </button>
@@ -79,53 +52,43 @@ export function MainMenu({ onStartGame, onShowReport, onShowModes, onShowShop }:
   return (
     <div className="absolute inset-0 w-full h-full bg-slate-950 overflow-hidden">
       <div className="relative w-full h-full">
+        {/* Background Layer */}
         <img 
-          src="/assets/newMainmenu.png" 
+          src="/assets/Mainmenu.png" 
           alt="Survival Menu" 
-          className="w-full h-full object-fill block"
+          className="absolute inset-0 w-full h-full object-cover block"
+          style={{ imageRendering: 'pixelated' }}
         />
         
-        {/* Invisible Image Map Overlays with Sci-Fi Effects */}
-        <MenuButton 
-          onClick={onStartGame} 
-          className="left-[35%] top-[31.5%] w-[30%] h-[7%]"
-          title="Start Game"
-          color="cyan"
-        />
-        
-        <MenuButton 
-          onClick={onShowModes}
-          className="left-[35%] top-[39.5%] w-[30%] h-[7%]"
-          title="Game Modes"
-          color="indigo"
-        />
+        {/* Buttons UI Overlay */}
+        <div className="absolute bottom-[10%] left-[5%] md:left-[8%] flex flex-col justify-end gap-3 md:gap-4 z-10 drop-shadow-2xl">
+          
+          <MenuButton 
+            onClick={onStartGame} 
+            title="Start Game"
+            spriteIndex={0}
+          />
+          
+          <MenuButton 
+            onClick={onShowShop}
+            title="Armory"
+            spriteIndex={1}
+          />
 
-        <MenuButton 
-          onClick={onShowShop}
-          className="left-[35%] top-[47.5%] w-[30%] h-[7%]"
-          title="Upgrades / Shop"
-          color="cyan"
-        />
+          <MenuButton 
+            onClick={onShowModes}
+            title="Galaxy"
+            spriteIndex={2}
+          />
 
-        {/* We map "Read Report" to "HOW TO PLAY" */}
-        <MenuButton 
-          onClick={onShowReport} 
-          className="left-[35%] top-[55.5%] w-[30%] h-[7%]"
-          title="How to Play"
-          color="indigo"
-        />
+          {/* Map settings button to report view for now, or you can implement actual settings */}
+          <MenuButton 
+            onClick={onShowReport} 
+            title="Settings"
+            spriteIndex={3}
+          />
 
-        <MenuButton 
-          className="left-[35%] top-[63.5%] w-[30%] h-[7%]"
-          title="Leaderboards"
-          locked
-        />
-
-        <MenuButton 
-          className="left-[35%] top-[71.5%] w-[30%] h-[7%]"
-          title="Exit Game"
-          locked
-        />
+        </div>
       </div>
     </div>
   );

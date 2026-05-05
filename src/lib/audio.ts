@@ -112,6 +112,33 @@ export class SoundManager {
     osc.stop(this.ctx.currentTime + 0.15);
   }
 
+  playBossWarning() {
+    if (!this.ctx || !this.masterGain) return;
+    
+    const freqs = [350, 450]; 
+    const timeOffset = 0.35;
+    
+    for (let i = 0; i < 10; i++) {
+       const osc = this.ctx.createOscillator();
+       const gain = this.ctx.createGain();
+       
+       osc.type = 'sawtooth';
+       
+       const freq = i % 2 === 0 ? freqs[0] : freqs[1];
+       osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * timeOffset);
+       
+       gain.gain.setValueAtTime(0, this.ctx.currentTime + i * timeOffset);
+       gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + i * timeOffset + 0.05);
+       gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + i * timeOffset + timeOffset);
+       
+       osc.connect(gain);
+       gain.connect(this.masterGain);
+       
+       osc.start(this.ctx.currentTime + i * timeOffset);
+       osc.stop(this.ctx.currentTime + (i + 1) * timeOffset);
+    }
+  }
+
   playGameOver() {
     if (!this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();

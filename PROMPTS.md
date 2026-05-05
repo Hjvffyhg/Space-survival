@@ -173,7 +173,83 @@ The bar utilizes an `(e.hp < e.maxHp || isActive) && e.hp > 0` condition to stri
 
 **Result:** I updated the Inspiration section in `IDEAS.md` to correctly list the CPU task scheduling algorithms used in the game: FCFS, RR, and HRRN.
 
-## 32. Confirm Software and Development Requirements
-> "innit true? Selected code path: /IDEAS.md Selected code: **Software Requirements:**..."
+## 32. HUD Enhancements
+> "In src/components/GameCanvas.tsx, enhance the Heads-Up Display (HUD). Add visual cues for active power-ups, cooldowns for special abilities (Dash, Shield), and perhaps a visual indicator for the current CPU scheduling algorithm."
 
-**Result:** Yes, it is true! Unlike traditional games built in Unity or Godot, this project runs natively in the browser using the HTML5 Canvas API, with React and TypeScript managing the UI and game state. To make it perfectly accurate to how it was built here, I appended **Google AI Studio** to the Code Editor line in `IDEAS.md`.
+**Result:** Enhanced the HUD in `GameCanvas.tsx` with several visual improvements:
+- **CPU Scheduling Indicator:** Added a new telemetry panel under the Target counter that explicitly lists the current active algorithm (FCFS, RR, HRRN) alongside real-time parameters like Active Cores, Time Quantum intervals, and Dynamic Prioritization Ratios.
+- **Power-Up Badges:** Refactored the plain-text power-up list into heavily stylized, distinct colored glowing badges for `SPEED` and `WPON` multipliers, highlighting the remaining buff time robustly.
+- **Ability Cooldowns:** The Dash (`DSH`) and Shield (`SHD`) skill boxes now visually portray their cooldown states with a darkened semi-transparent vertical wipe/overlay reflecting exact percentage completion, accompanied by an explicit countdown timer and a red `NO STM` indicator if stamina drops below required thresholds.
+
+## 33. Sprite Rendering Fallback Fix & Dead Enemy Bug
+> "there's  a bug here, the player and t he enemy didn't show like t he enemy didn't  show" and later "fix the bug"
+
+**Result:** Identified and fixed a critical bug where corrupted or missing sprite assets caused `ShipRenderer` to silently fail rendering the player and enemies. The issue occurred because corrupted PNG files (broken bytes due to UTF-8 encoding damage) would fire the browser's `onload` callback and yield a zero-size image element rather than invoking `onerror`, effectively hiding both the actual player and returning `true` for `hasSprites` erroneously bypassing fallback drawing behavior. 
+- I updated the runtime sprite evaluation `get hasSprites(): boolean` logically inside `/src/lib/voidFleet.ts` to strictly require `this.base.img.naturalWidth > 0`.
+- I fixed a related edge case inside `GameCanvas.tsx`'s loop where enemies that are manually drawn natively (missing their renderers) would never drop XP or despawn. The despawn code now correctly evaluates `if (!e.renderer || e.renderer.fullyDead)` to instantly yield their collectible drops and filter them out from the array accurately.
+
+## 34. Asset Corruption Restoration
+> "the asset didn't applied"
+
+**Result:** The fallback circles were appearing correctly as intended because the underlying PNG assets in `public/VoidFleetPack` had actually become completely corrupted (turned into UTF-8 replacement strings during a hot-reload sync). To fix this instantly, I detected the original `VoidFleetPack_organized (1).zip` backup located natively inside the `public/assets/` directory. I forcefully purged the corrupted image directory and completely mapped a clean absolute extraction over the `VoidFleetPack` folder, thereby restoring the untouched original binary PNG sprites back into the canvas loop.
+
+## 35. Boss Warning Effect
+> "In GameCanvas.tsx, implement distinct visual and audio notifications before a boss enemy (e.g., Goliath, Laser Core) appears. This could be a screen-shaking effect with a specific warning sound, indicating a major threat is incoming."
+
+**Result:** Implemented a robust 3.5-second pre-spawn warning mode explicitly for boss enemies (like Goliath/Cycler/Executor).
+- **Audio Notification:** Added `playBossWarning()` into `audio.ts` which fires a dynamic blaring siren generated via Web Audio `OscillatorNode` logic using an alternating-frequency sawtooth wave synchronized to span exactly 3.5 seconds.
+- **Visual Alert:** Overlaid an animated HTML node `WARNING: MAJOR THREAT INCOMING` onto the screen powered by `animate-pulse` and intense text-shadow glows.
+- **Screen Shake:** Engineered a `screenShakeTimer` system into `GameCanvas.tsx` that aggressively translates the entire `<canvas>` rendering context (`cameraX`, `cameraY`) with randomized intensity jitters for the exact 3.5-second duration, before smoothly concluding and physically dropping the pending boss onto the battlefield.
+
+## 36. Main Menu Background & Buttons Image Prompts (Pixel Art)
+> "It must be pixelated also" / "Now for the buttons"
+
+**Result:** Provided the user with targeted text prompts to generate 16-bit pixel art style UI elements for `Void Fleet`. 
+- Updated the main menu background prompt to emphasize retro-arcade pixel-art styling, 16-bit sprites, dithering, and chunky pixels.
+- Created prompts specifically for the interactive menu buttons to generate matching sci-fi UI button sprite sheets with a cohesive pixel art aesthetic.
+
+## 38. Mobile Touch Controls
+> "Now let's focus for mobile control's"
+
+**Result:** Implemented a robust Twin-Stick touch scheme using a custom `VirtualJoystick` component that automatically reveals itself on touch devices.
+- **Left Joystick:** Fully variable virtual stick for 360-degree digital movement manipulation overlaying smoothly onto the player's core velocity system.
+- **Right Joystick:** Multi-directional aim-and-shoot stick that dynamically offsets the mouse position relative to the camera to allow simultaneous tracking and continuous crosshair fire.
+- **Ancillary Functions:** Deployed floating action buttons mapping specifically to DASH (shift), WPN (Q), and SHD (E). Also included a hook that visually hides keyboard shortcut hints when traversing in mobile representation.
+
+## 39. Main Menu Custom Assets Injection
+> "I already added it, the main menu and buttons, but here in the buttons"
+
+**Result:** Rearchitected `MainMenu.tsx` into a true UI overlay using the user's newly provided pixel-art assets (`Mainmenu.png` and `Buttons.png`). Built a scalable CSS sprite-sheet slicer for `<MenuButton>` using `background-position` mathematically dividing the 4 vertical button sprites mapping to `Start Game`, `Armory`, `Galaxy`, and `Settings`. Positioned the vertical button stack gracefully over the left pane with pixel-perfect aliasing and lively hover scaling.
+
+## 40. Button Asset Transparency Fix
+> "delete the white" / "I already changed it"
+
+**Result:** Recognized that the user replaced the fake grid-background PNG with a truly transparent button sprite sheet. Upgraded the CSS from `shadow-xl` to `drop-shadow-xl` so the DOM casting shadows correctly respect the alpha channel of the custom pixel art buttons, rather than rendering an unseemly bounding-box rectangle shadow.
+
+## 41. Adjusting Button Position and Scale
+> "place it in a good position where it's good as a visual and make them compress a bit (the buttons)"
+
+**Result:** Adjusted the sizing, spacing, and positioning of the `MenuButton` stack. Decreased their physical dimensions and gap size to make them look more compressed and integrated. Relocated the stack from vertically-centered to the bottom-left (`bottom-[10%] left-[5%]`) to prevent them from awkwardly overlapping the epic imposing boss ship in the background artwork.
+
+## 42. Adding Asteroid Sprite Assets
+> "i and an asteroid asset"
+
+**Result:** Integrated the user's `asteroids.png` spritesheet. Replaced the procedurally drawn vector asteroids with high-quality pixel art asteroid sprites. Randomly selected coordinates from the 7x4 spritesheet for each spawned asteroid instance, giving a widely varied, detailed, and retro look.
+
+## 43. Refactor Scheduling Core Logic into Drones
+> "Refactor the CPU scheduling integration in src/components/GameCanvas.tsx to decouple it from enemy movement. Instead, apply the CPU algorithms (FCFS, RR, HRRN) to player auto-targeting drones (Cores) that orbit the player. These drones should automatically lock onto and fire homing lasers at assigned targets, blending CS concepts with shooter gameplay."
+
+**Result:** Reworked the underlying OS scheduling logic. 
+- Transformed the ethereal `activeEnemies` abstraction into a tangible `state.drones` representation arrays that orbit the player ship.
+- Migrated FCFS, RR, and HRRN scheduling directly into these Drones. Real targets are popped from `readyQueue` and allocated to available drone arrays based on OS timing rules.
+- Added visual representation for the Drones (cyan/red indicators) displaying dynamic orbit rotation and active lock-on laser pointers connecting the drone explicitly to its targeted victim.
+- Gave the drone's lasers authentic homing capabilities with sharp continuous tracking parameters `isDrone`, tracking active targets up to 400px away.
+- Decoupled `hrrnMultiplier` from enemy speed and damage characteristics (Kamikaze / Boss speed), ensuring algorithms represent pure target prioritization.
+
+## 44. Retro Pixelated Aesthetic Pass
+> "Update the main menu assets and buttons to have a pixelated aesthetic, aligning with the 'Void Fleet' theme and the overall game's retro-style graphics."
+
+**Result:** Globally enforced a retro pixel theme.
+- Injected `VT323` via Google Fonts into the Tailwind CSS global style pipeline and applied it as the default font globally (`--font-sans` and `--font-mono`), completely converting the UI font to a pixel-art style.
+- Appended global `image-rendering: pixelated;` directives in CSS for `img`, `canvas`, and custom UI layers.
+- Removed anti-aliased CSS artifacts (`rounded-lg`, generic smoothed boundaries) from `<MenuButton>` "LOCKED" states and replaced them with sharp, 2px stroke, solid-drop-shadow pixel art containers (`shadow-[2px_2px_0px_#7f1d1d]`).

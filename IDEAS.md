@@ -38,7 +38,7 @@ The project will use a combination of assets sourced from [Void Fleet Pack 1 by 
 - Game Engine: React, TypeScript, HTML5 Canvas API
 - Graphics Editor: Photoshop, Canva, or Krita (for custom sprites)
 - Audio Editor: Audacity or FL Studio (basic use)
-- Code Editor: Visual Studio Code / Google AI Studio
+- Code Editor: Visual Studio Code
 
 **Development Requirements:**
 

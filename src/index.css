@@ -1,1 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "VT323", monospace;
+  --font-mono: "VT323", monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+img, canvas, .pixelated {
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}

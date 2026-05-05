@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { soundManager } from '../lib/audio';
+import { VirtualJoystick } from './VirtualJoystick';
 import { loadShip, loadProjectile, loadAllProjectiles, ShipRenderer, SHIP_CONFIGS, PROJECTILE_CONFIGS, AnimSprite, ShipName, ShipSprites } from '../lib/voidFleet';
 
 export type SchedulerAlgo = 'FCFS' | 'RR' | 'HRRN';
@@ -31,6 +32,8 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   const waveRef = useRef<HTMLSpanElement>(null);
   const timeRef = useRef<HTMLSpanElement>(null);
   const targetsRef = useRef<HTMLSpanElement>(null);
+  const algoRef = useRef<HTMLSpanElement>(null);
+  const algoStatsRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const ammoRef = useRef<HTMLSpanElement>(null);
@@ -43,6 +46,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   const wpn2Ref = useRef<HTMLDivElement>(null);
   const dshRef = useRef<HTMLDivElement>(null);
   const shdSkillRef = useRef<HTMLDivElement>(null);
+  const bossWarningUIRef = useRef<HTMLDivElement>(null);
   
   const onGameOverRef = useRef(onGameOver);
   const onReturnMenuRef = useRef(onReturnMenu);
@@ -51,9 +55,32 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   const isPausedRef = useRef(false);
   const isDeadRef = useRef(false);
 
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const mobileMoveRef = useRef({ x: 0, y: 0, active: false });
+  const mobileAimRef = useRef({ x: 0, y: 0, active: false });
+
+  const asteroidSpriteRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const onTouch = () => {
+        setIsTouchDevice(true);
+        window.removeEventListener('touchstart', onTouch);
+    };
+    window.addEventListener('touchstart', onTouch);
+    return () => window.removeEventListener('touchstart', onTouch);
+  }, []);
+
   useEffect(() => {
     onGameOverRef.current = onGameOver;
   }, [onGameOver]);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = '/assets/asteroids.png';
+    img.onload = () => {
+      asteroidSpriteRef.current = img;
+    };
+  }, []);
 
   useEffect(() => {
     onReturnMenuRef.current = onReturnMenu;
@@ -116,7 +143,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
       
       const pSprites = ASSETS_CACHE.ships[selectedShip]!;
-      playerRenderer = new ShipRenderer(pSprites, SHIP_CONFIGS[selectedShip], (30 * 4.0) / SHIP_CONFIGS[selectedShip].size);
+      const pr = new ShipRenderer(pSprites, SHIP_CONFIGS[selectedShip], (30 * 4.0) / SHIP_CONFIGS[selectedShip].size);
+      if (pr.hasSprites) {
+        playerRenderer = pr;
+      }
 
       // Load upgrades
       const upgrades = JSON.parse(localStorage.getItem('upgrades') || '{"hp":0,"dmg":0,"speed":0}');
@@ -162,17 +192,23 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       enemies: [] as any[],
       readyQueue: [] as number[],
       currentAlgo: 'FCFS' as SchedulerAlgo,
-      activeEnemies: new Map<number, { timeRemaining: number }>(),
+      drones: [] as any[],
       isOutsideSafeZone: false,
       score: 0,
       lastSpawnTime: lastTime / 1000,
       lastItemSpawnTime: lastTime / 1000,
       diffTimer: 0,
       keys: {} as Record<string, boolean>,
+      mobileMove: { x: 0, y: 0, active: false },
+      mobileAim: { x: 0, y: 0, active: false },
       mouse: { screenX: 0, screenY: 0, x: 0, y: 0, down: false },
       lastFireTime: 0,
       isGameOver: false,
       lastWave: 1,
+      bossWarningTimer: 0,
+      screenShakeTimer: 0,
+      pendingBoss: null as any,
+      showBossWarning: false,
       notification: { time: 0, text1: '', text2: '' },
       autoPilot: false
     };
@@ -192,6 +228,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
     // Generate initial asteroids
     for(let i = 0; i < 30 + civilizationLevel * 15; i++) {
         state.asteroids.push({
+            id: i,
             x: Math.random() * MAP_WIDTH,
             y: Math.random() * MAP_HEIGHT,
             vx: ((Math.random() - 0.5) * 50) * (1 + civilizationLevel * 0.5),
@@ -199,7 +236,9 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             radius: 20 + Math.random() * 50,
             angle: Math.random() * Math.PI * 2,
             spin: (Math.random() - 0.5) * 2,
-            hp: 200 + civilizationLevel * 100
+            hp: 200 + civilizationLevel * 100,
+            spriteIdxX: Math.floor(Math.random() * 7),
+            spriteIdxY: Math.floor(Math.random() * 4)
         });
     }
 
@@ -257,6 +296,9 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       lastTime = time;
       if (dt > 0.1) dt = 0.1; // caps deltaTime if tab is put to background
 
+      state.mobileMove = mobileMoveRef.current;
+      state.mobileAim = mobileAimRef.current;
+
       if (state.isGameOver) {
           // just render the last frame repeatedly to prevent black flash
           const cameraX = Math.max(0, Math.min(MAP_WIDTH - canvas.width, state.player.x - canvas.width / 2));
@@ -271,8 +313,15 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       // Calculate Camera
       const cameraX = Math.max(0, Math.min(MAP_WIDTH - canvas.width, state.player.x - canvas.width / 2));
       const cameraY = Math.max(0, Math.min(MAP_HEIGHT - canvas.height, state.player.y - canvas.height / 2));
-      state.mouse.x = state.mouse.screenX + cameraX;
-      state.mouse.y = state.mouse.screenY + cameraY;
+      
+      if (state.mobileAim.active) {
+          state.mouse.x = state.player.x + state.mobileAim.x * 200;
+          state.mouse.y = state.player.y + state.mobileAim.y * 200;
+          state.mouse.down = true;
+      } else {
+          state.mouse.x = state.mouse.screenX + cameraX;
+          state.mouse.y = state.mouse.screenY + cameraY;
+      }
 
       // Calculate Wave logic
       const currentWave = Math.floor(state.diffTimer / 30) + 1;
@@ -296,6 +345,16 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         timeRef.current.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
       }
       if (targetsRef.current) targetsRef.current.innerText = `TARGETS: ${state.enemies.length}`;
+      if (algoRef.current) algoRef.current.innerText = cfg.algo;
+      if (algoStatsRef.current) {
+          let stats = `CORES: ${cfg.cores}`;
+          if (cfg.algo === 'RR') stats += `<br/><span class="text-[#f43f5e]">QUANTUM: ${cfg.quantum.toFixed(1)}s</span>`;
+          else if (cfg.algo === 'HRRN') stats += `<br/><span class="text-[#fbbf24]">PRIOA: (W+S)/S</span>`;
+          
+          if (algoStatsRef.current.innerHTML !== stats) {
+              algoStatsRef.current.innerHTML = stats;
+          }
+      }
 
       if (currentWave > state.lastWave) {
          state.lastWave = currentWave;
@@ -340,6 +399,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
          }
       }
 
+      if (bossWarningUIRef.current) {
+          bossWarningUIRef.current.style.opacity = state.showBossWarning ? '1' : '0';
+      }
+
       // 1. Spawning
       let spawnInterval = Math.max(0.1, 2.0 - (state.diffTimer / 60) - (civilizationLevel * 0.2)); // harder over time
       const scaler = 1 + (civilizationLevel * 0.3) + (state.score / 5000) + (state.diffTimer / 300);
@@ -362,7 +425,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         let speed = 140 * (1 + (scaler - 1) * 0.5);
         let radius = 12;
 
-        if (state.diffTimer > 45 && Math.random() < 0.03) { // Boss spawn chance
+        if (state.diffTimer > 45 && Math.random() < 0.03 && state.bossWarningTimer <= 0) { // Boss spawn chance
             const bossRand = Math.random();
             if (bossRand < 0.33) {
                 type = 'boss';
@@ -418,9 +481,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         else if (type === 'kamikaze') shipName = 'Bomber';
         else if (type === 'turret') shipName = 'Support ship';
         
-        const renderer = shipName ? new ShipRenderer(ASSETS_CACHE.ships[shipName]!, SHIP_CONFIGS[shipName], (radius * 3.6) / SHIP_CONFIGS[shipName].size) : null;
+        let renderer = shipName ? new ShipRenderer(ASSETS_CACHE.ships[shipName]!, SHIP_CONFIGS[shipName], (radius * 3.6) / SHIP_CONFIGS[shipName].size) : null;
+        if (renderer && !renderer.hasSprites) renderer = null;
         
-        state.enemies.push({
+        const enemyObj = {
           id: newId,
           type,
           x: ex, y: ey,
@@ -431,10 +495,38 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           dashTimer: 0,
           shootTimer: 0,
           renderer
-        });
-        state.readyQueue.push(newId);
-        soundManager.playEnemySpawn();
+        };
+
+        if (type.startsWith('boss')) {
+            state.bossWarningTimer = 3.5;
+            state.screenShakeTimer = 3.5;
+            state.showBossWarning = true;
+            state.pendingBoss = enemyObj;
+            if ((soundManager as any).playBossWarning) {
+                (soundManager as any).playBossWarning();
+            }
+        } else {
+            state.enemies.push(enemyObj);
+            state.readyQueue.push(newId);
+            soundManager.playEnemySpawn();
+        }
+
         state.lastSpawnTime = now;
+      }
+
+      if (state.bossWarningTimer > 0) {
+          state.bossWarningTimer -= dt;
+          if (state.bossWarningTimer <= 0 && state.pendingBoss) {
+              state.showBossWarning = false;
+              state.enemies.push(state.pendingBoss);
+              state.readyQueue.push(state.pendingBoss.id);
+              state.pendingBoss = null;
+              soundManager.playEnemySpawn();
+          }
+      }
+      
+      if (state.screenShakeTimer > 0) {
+          state.screenShakeTimer -= dt;
       }
 
       // Periodically spawn items
@@ -456,76 +548,85 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
 
       // 2. Scheduler logic
+      // Sync drone count with cfg.cores
+      while (state.drones.length < cfg.cores) {
+          state.drones.push({ id: state.drones.length, targetId: null, orbitAngle: (state.drones.length * (Math.PI * 2)) / cfg.cores, timeRemaining: 0, fireTimer: 0 });
+      }
+      while (state.drones.length > cfg.cores) {
+          state.drones.pop();
+      }
+
       // Increase Wait Time for enemies in ready queue (specifically for HRRN)
       state.readyQueue.forEach(id => {
          const e = state.enemies.find((x: any) => x.id === id);
          if (e) e.W += dt;
       });
 
-      // Process currently active enemies
-      for (const [id, activeData] of Array.from(state.activeEnemies.entries())) {
-        const e = state.enemies.find((x: any) => x.id === id);
-        if (!e) {
-          state.activeEnemies.delete(id);
-          continue;
-        }
-        
-        if (cfg.algo === 'FCFS') {
-          // FCFS purely processes until the entity is dead. Never preempts.
-        } else if (cfg.algo === 'RR') {
-          activeData.timeRemaining -= dt;
-          if (activeData.timeRemaining <= 0) {
-            state.activeEnemies.delete(id);
-            // Re-queue explicitly to the back of the ready queue
-            state.readyQueue.push(id);
-          }
-        } else if (cfg.algo === 'HRRN') {
-           activeData.timeRemaining -= dt;
-           if (activeData.timeRemaining <= 0) {
-             state.activeEnemies.delete(id);
-             e.W = 0; // Reset wait time
-             state.readyQueue.push(id);
-           }
-        }
-      }
+      // Process currently active drones
+      state.drones.forEach((drone: any) => {
+         drone.orbitAngle += dt * 3.0; // Drone orbit speed
+         
+         if (drone.targetId !== null) {
+            const e = state.enemies.find((x: any) => x.id === drone.targetId);
+            if (!e) {
+                drone.targetId = null;
+            } else {
+                if (cfg.algo === 'FCFS') {
+                   // FCFS purely processes until the entity is dead. Never preempts.
+                } else if (cfg.algo === 'RR') {
+                   drone.timeRemaining -= dt;
+                   if (drone.timeRemaining <= 0) {
+                      state.readyQueue.push(drone.targetId);
+                      drone.targetId = null;
+                   }
+                } else if (cfg.algo === 'HRRN') {
+                   drone.timeRemaining -= dt;
+                   if (drone.timeRemaining <= 0) {
+                      e.W = 0; // Reset wait time
+                      state.readyQueue.push(drone.targetId);
+                      drone.targetId = null;
+                   }
+                }
+            }
+         }
 
-      // Allocate unused Cores (CPU scheduling!)
-      while(state.activeEnemies.size < cfg.cores && state.readyQueue.length > 0) {
-        let nextEnemyId = null;
-        
-        if (cfg.algo === 'FCFS' || cfg.algo === 'RR') {
-           // Queue is explicit. Grab the first element.
-           nextEnemyId = state.readyQueue[0];
-        } else if (cfg.algo === 'HRRN') {
-           // Find ready enemy with highest response ratio
-           let maxRatio = -1;
-           for (const id of state.readyQueue) {
-              const x = state.enemies.find((e: any) => e.id === id);
-              if (x) {
-                 const R = (x.W + x.S) / x.S;
-                 if (R > maxRatio) {
-                    maxRatio = R;
-                    nextEnemyId = id;
-                 }
-              }
-           }
-        }
+         // Allocate unused Cores (CPU scheduling!)
+         if (drone.targetId === null && state.readyQueue.length > 0) {
+            let nextEnemyId: number | null = null;
+            
+            if (cfg.algo === 'FCFS' || cfg.algo === 'RR') {
+               // Queue is explicit. Grab the first element.
+               nextEnemyId = state.readyQueue[0];
+            } else if (cfg.algo === 'HRRN') {
+               // Find ready enemy with highest response ratio
+               let maxRatio = -1;
+               for (const id of state.readyQueue) {
+                  const x = state.enemies.find((e: any) => e.id === id);
+                  if (x) {
+                     const R = (x.W + x.S) / x.S;
+                     if (R > maxRatio) {
+                        maxRatio = R;
+                        nextEnemyId = id;
+                     }
+                  }
+               }
+            }
 
-        if (nextEnemyId !== null) {
-          // Remove from ready queue
-          state.readyQueue = state.readyQueue.filter(id => id !== nextEnemyId);
-          
-          const nextEnemy = state.enemies.find((e: any) => e.id === nextEnemyId);
-          if (nextEnemy) {
-              let tr = 9999;
-              if (cfg.algo === 'RR') tr = cfg.quantum;
-              if (cfg.algo === 'HRRN') tr = nextEnemy.S;
-              state.activeEnemies.set(nextEnemyId, { timeRemaining: tr });
-          }
-        } else {
-          break;
-        }
-      }
+            if (nextEnemyId !== null) {
+               // Remove from ready queue
+               state.readyQueue = state.readyQueue.filter(id => id !== nextEnemyId);
+               
+               const nextEnemy = state.enemies.find((e: any) => e.id === nextEnemyId);
+               if (nextEnemy) {
+                   drone.targetId = nextEnemyId;
+                   let tr = 9999;
+                   if (cfg.algo === 'RR') tr = cfg.quantum;
+                   if (cfg.algo === 'HRRN') tr = nextEnemy.S;
+                   drone.timeRemaining = tr;
+               }
+            }
+         }
+      });
 
       // Update timers
       if (playerRenderer) playerRenderer.update(dt);
@@ -603,16 +704,21 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
          if (state.player.y < 150) vy += 1;
          if (state.player.y > MAP_HEIGHT - 150) vy -= 1;
       } else {
-          if (state.keys['w']) vy -= 1;
-          if (state.keys['s']) vy += 1;
-          if (state.keys['a']) vx -= 1;
-          if (state.keys['d']) vx += 1;
+          if (state.mobileMove.active) {
+              vx = state.mobileMove.x;
+              vy = state.mobileMove.y;
+          } else {
+              if (state.keys['w']) vy -= 1;
+              if (state.keys['s']) vy += 1;
+              if (state.keys['a']) vx -= 1;
+              if (state.keys['d']) vx += 1;
+          }
       }
       const len = Math.hypot(vx, vy);
       if (len > 0) { vx /= len; vy /= len; }
       
       let pSpeed = state.player.speedTimer > 0 ? state.player.baseSpeed * 1.8 : state.player.baseSpeed;
-      let isBoosting = state.keys['shift'] && len > 0;
+      let isBoosting = (state.keys['shift'] || document.getElementById('mobile-boost-btn')?.dataset.active === 'true') && len > 0;
       
       if (isBoosting) {
           if (state.player.stamina > 0) {
@@ -705,7 +811,31 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
          }
       }
 
-      state.bullets.forEach(b => {
+      state.bullets.forEach((b: any) => {
+        if (b.isDrone) {
+            let closestEnemy: any = null;
+            let closestDist = 400; // Seeking radius
+            state.enemies.forEach((e: any) => {
+                const d = Math.hypot(e.x - b.x, e.y - b.y);
+                if (d < closestDist) { closestDist = d; closestEnemy = e; }
+            });
+            if (closestEnemy) {
+                const dx = closestEnemy.x - b.x;
+                const dy = closestEnemy.y - b.y;
+                const targetAngle = Math.atan2(dy, dx);
+                const currentAngle = Math.atan2(b.vy, b.vx);
+                
+                let angleDiff = targetAngle - currentAngle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                
+                const turnSpeed = 10 * dt; // Sharp turn ability
+                const newAngle = currentAngle + Math.max(-turnSpeed, Math.min(turnSpeed, angleDiff));
+                const speed = Math.hypot(b.vx, b.vy);
+                b.vx = Math.cos(newAngle) * speed;
+                b.vy = Math.sin(newAngle) * speed;
+            }
+        }
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       });
       state.asteroids.forEach(a => {
@@ -887,12 +1017,11 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                      e.shootTimer = 5.0;
                  }
              } else if (e.type === 'boss_hrrn') {
-                 // Executor Mechanic: Aging / Response Ratio Amplification
-                 // The longer the wait time `e.W`, the faster and more devastating it becomes
-                 const hrrnMultiplier = 1 + Math.min(e.W / 15, 4); // Maxes out scaling at +4x intensity
+                 // Decoupled from scheduling logic: base difficulty multiplier
+                 const hrrnMultiplier = 1;
 
                  if (e.laserTimer <= 0) {
-                     // Focused charging blast that gets wider with age
+                     // Focused charging blast
                      const spreadCount = Math.floor(1 + (hrrnMultiplier * 1.5));
                      for (let i = -spreadCount; i <= spreadCount; i++) {
                          const angle = Math.atan2(dy, dx) + (i * 0.1);
@@ -1080,7 +1209,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                // First frame of death
                e.isDeadInit = true;
                scoreGained += e.type.startsWith('boss') ? (e.type === 'boss' ? 500 : 2500) : (['tank', 'turret'].includes(e.type) ? 50 : (e.type === 'kamikaze' ? 20 : 10));
-               state.activeEnemies.delete(e.id);
+               state.drones.forEach((drone: any) => { if (drone.targetId === e.id) drone.targetId = null; });
                state.readyQueue = state.readyQueue.filter(id => id !== e.id);
                const deathParticleCount = e.type.startsWith('boss') ? (e.type === 'boss' ? 50 : 150) : 15;
                for (let i = 0; i < deathParticleCount; i++) {
@@ -1117,7 +1246,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                }
             }
 
-            if (e.renderer && e.renderer.fullyDead) {
+            if (!e.renderer || e.renderer.fullyDead) {
                return false;
             }
          }
@@ -1182,10 +1311,14 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       if (staminaRef.current) staminaRef.current.style.width = `${staminaPercent}%`;
       
       if (powerupRef.current) {
-          let buffs = [];
-          if (state.player.speedTimer > 0) buffs.push(`SPEED: ${Math.ceil(state.player.speedTimer)}s`);
-          if (state.player.weaponTimer > 0) buffs.push(`WPON: ${Math.ceil(state.player.weaponTimer)}s`);
-          powerupRef.current.innerText = buffs.join(' | ');
+          let buffsHtml = '';
+          if (state.player.speedTimer > 0) {
+              buffsHtml += `<div class="bg-[#fbbf24]/20 border border-[#fbbf24] text-[#fbbf24] px-2 py-0.5 rounded flex justify-between items-center tracking-widest shadow-[0_0_5px_rgba(251,191,36,0.5)]"><span class="uppercase mr-3">SPEED</span><span>${Math.ceil(state.player.speedTimer)}s</span></div>`;
+          }
+          if (state.player.weaponTimer > 0) {
+              buffsHtml += `<div class="bg-[#dc2626]/20 border border-[#dc2626] text-[#dc2626] px-2 py-0.5 rounded flex justify-between items-center tracking-widest shadow-[0_0_5px_rgba(220,38,38,0.5)]"><span class="uppercase mr-3">WPON</span><span>${Math.ceil(state.player.weaponTimer)}s</span></div>`;
+          }
+          powerupRef.current.innerHTML = buffsHtml ? `<div class="flex flex-col gap-1.5 mt-2">${buffsHtml}</div>` : '';
       }
 
       if (ammoRef.current) ammoRef.current.innerText = `${state.player.ammo}`;
@@ -1197,13 +1330,37 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
 
       if (dshRef.current) {
-          const isReady = state.player.dashCooldown <= 0 && state.player.stamina >= 15;
-          dshRef.current.className = `w-9 h-9 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border border-[#8B5CF6] text-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'bg-[#111827] border border-slate-700 text-slate-600 opacity-50'}`;
+          const cd = state.player.dashCooldown;
+          const isReady = cd <= 0 && state.player.stamina >= 15;
+          const bgHeight = cd > 0 ? (cd / 3.0) * 100 : 0; 
+          dshRef.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border-2 border-[#8B5CF6] text-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.4)]' : 'bg-[#111827] border border-slate-700 text-slate-500'}`;
+          let content = 'DSH';
+          if (cd > 0) content = `<span class="z-10 text-white font-bold">${cd.toFixed(1)}s</span>`;
+          else if (!isReady) content = `<span class="z-10 text-[8px] text-red-500 leading-tight text-center">NO<br/>STM</span>`;
+          dshRef.current.innerHTML = `
+             <div class="absolute inset-0 overflow-hidden outline-none pointer-events-none">
+                <div class="absolute bottom-0 left-0 right-0 bg-black/70" style="height: ${bgHeight}%"></div>
+             </div>
+             <span class="z-10">${content}</span>
+             <div class="absolute -bottom-2 -right-2 bg-[#8B5CF6] text-white text-[8px] flex items-center justify-center z-10 w-4 h-4 shadow border border-[#111827] font-bold">Q</div>
+          `;
       }
 
       if (shdSkillRef.current) {
-          const isReady = state.player.shieldCooldown <= 0 && state.player.stamina >= 20;
-          shdSkillRef.current.className = `w-9 h-9 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border border-[#3b82f6] text-[#3b82f6] shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-[#111827] border border-slate-700 text-slate-600 opacity-50'}`;
+          const cd = state.player.shieldCooldown;
+          const isReady = cd <= 0 && state.player.stamina >= 20;
+          const bgHeight = cd > 0 ? (cd / 5.0) * 100 : 0;
+          shdSkillRef.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border-2 border-[#3b82f6] text-[#3b82f6] shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-[#111827] border border-slate-700 text-slate-500'}`;
+          let content = 'SHD';
+          if (cd > 0) content = `<span class="z-10 text-white font-bold">${cd.toFixed(1)}s</span>`;
+          else if (!isReady) content = `<span class="z-10 text-[8px] text-red-500 leading-tight text-center">NO<br/>STM</span>`;
+          shdSkillRef.current.innerHTML = `
+             <div class="absolute inset-0 overflow-hidden outline-none pointer-events-none">
+                <div class="absolute bottom-0 left-0 right-0 bg-black/70" style="height: ${bgHeight}%"></div>
+             </div>
+             <span class="z-10">${content}</span>
+             <div class="absolute -bottom-2 -right-2 bg-slate-700 text-white text-[8px] flex items-center justify-center z-10 w-4 h-4 shadow border border-[#111827] font-bold">E</div>
+          `;
       }
 
       // Check Death
@@ -1214,20 +1371,26 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
 
       // 6. Drone Auto-Turret (CPU Scheduling mechanism visualization)
-      if (state.droneFireTimer === undefined) state.droneFireTimer = 0;
-      state.droneFireTimer -= dt;
-      if (state.droneFireTimer <= 0) {
-          state.activeEnemies.forEach((_, id) => {
-              const target = state.enemies.find((e: any) => e.id === id);
-              if (target) {
-                  const dx = target.x - state.player.x;
-                  const dy = target.y - state.player.y;
+      state.drones.forEach((drone: any) => {
+          if (drone.fireTimer === undefined) drone.fireTimer = 0;
+          drone.fireTimer -= dt;
+          
+          if (drone.targetId !== null) {
+              const target = state.enemies.find((e: any) => e.id === drone.targetId);
+              if (target && drone.fireTimer <= 0) {
+                  // Calculate literal drone positions
+                  const distance = 80; // Orbit radius
+                  const droneX = state.player.x + Math.cos(drone.orbitAngle) * distance;
+                  const droneY = state.player.y + Math.sin(drone.orbitAngle) * distance;
+                  
+                  const dx = target.x - droneX;
+                  const dy = target.y - droneY;
                   const dist = Math.hypot(dx, dy);
                   if (dist < 1000) {
-                      // Fire homing drone shot
+                      // Fire homing drone shot from Drone Pos
                       state.bullets.push({
-                          x: state.player.x,
-                          y: state.player.y,
+                          x: droneX,
+                          y: droneY,
                           vx: (dx/dist) * 1200,
                           vy: (dy/dist) * 1200,
                           life: 1.0,
@@ -1235,10 +1398,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                           isDrone: true
                       });
                   }
+                  drone.fireTimer = 0.2; // Drone fire rate
               }
-          });
-          state.droneFireTimer = 0.2; // Drone fire rate
-      }
+          }
+      });
 
       // 7. RENDER
       render(ctx, canvas, state, cameraX, cameraY);
@@ -1247,8 +1410,16 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
     const render = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: any, cameraX: number, cameraY: number) => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        let shakeX = 0;
+        let shakeY = 0;
+        if (state.screenShakeTimer > 0) {
+            const intensity = state.screenShakeTimer > 0 ? Math.min(state.screenShakeTimer * 5, 20) : 0;
+            shakeX = (Math.random() - 0.5) * intensity;
+            shakeY = (Math.random() - 0.5) * intensity;
+        }
+
         ctx.save();
-        ctx.translate(-cameraX, -cameraY);
+        ctx.translate(-cameraX + shakeX, -cameraY + shakeY);
 
         // Out of bounds background
         ctx.fillStyle = '#03050a'; // darker void
@@ -1307,37 +1478,51 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.save();
             ctx.translate(a.x, a.y);
             ctx.rotate(a.angle);
-            ctx.fillStyle = '#1e293b'; // slate-800
-            ctx.strokeStyle = '#334155'; // slate-700
-            ctx.lineWidth = 4;
             
-            ctx.beginPath();
-            // Irregular shape based on their id
-            const points = 7;
-            for(let i=0; i<points; i++) {
-                const angle = (Math.PI * 2 / points) * i;
-                // Add some irregularity
-                const r = a.radius * (0.8 + ((Math.sin(a.id || i + 1) + 1) / 2) * 0.4);
-                if (i === 0) ctx.moveTo(r, 0);
-                else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            if (asteroidSpriteRef.current) {
+                const img = asteroidSpriteRef.current;
+                const cols = 7;
+                const rows = 4;
+                const sw = img.width / cols;
+                const sh = img.height / rows;
+                const sx = (a.spriteIdxX || 0) * sw;
+                const sy = (a.spriteIdxY || 0) * sh;
 
-            // Craters inside
-            ctx.fillStyle = '#0f172a';
-            ctx.beginPath();
-            ctx.arc(-a.radius * 0.3, -a.radius * 0.2, a.radius * 0.2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(a.radius * 0.4, a.radius * 0.3, a.radius * 0.15, 0, Math.PI * 2);
-            ctx.fill();
+                ctx.drawImage(img, sx, sy, sw, sh, -a.radius*1.2, -a.radius*1.2, a.radius*2.4, a.radius*2.4);
+            } else {
+                ctx.fillStyle = '#1e293b'; // slate-800
+                ctx.strokeStyle = '#334155'; // slate-700
+                ctx.lineWidth = 4;
+                
+                ctx.beginPath();
+                // Irregular shape based on their id
+                const points = 7;
+                for(let i=0; i<points; i++) {
+                    const angle = (Math.PI * 2 / points) * i;
+                    // Add some irregularity
+                    const r = a.radius * (0.8 + ((Math.sin(a.id || i + 1) + 1) / 2) * 0.4);
+                    if (i === 0) ctx.moveTo(r, 0);
+                    else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Craters inside
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(-a.radius * 0.3, -a.radius * 0.2, a.radius * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(a.radius * 0.4, a.radius * 0.3, a.radius * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             // HP bar
-            if (a.hp < 200) {
+            if (a.hp < (200 + civilizationLevel * 100)) {
+               const maxHp = 200 + civilizationLevel * 100;
                ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
-               ctx.fillRect(-a.radius, -a.radius - 15, a.radius * 2 * (a.hp / 200), 4);
+               ctx.fillRect(-a.radius, -a.radius - 15, a.radius * 2 * (a.hp / maxHp), 4);
             }
 
             ctx.restore();
@@ -1538,8 +1723,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.restore();
         };
 
-        state.enemies.forEach((e: any) => { if (!state.activeEnemies.has(e.id)) renderEnemy(e, null); });
-        state.enemies.forEach((e: any) => { if (state.activeEnemies.has(e.id)) renderEnemy(e, state.activeEnemies.get(e.id)); });
+        state.enemies.forEach((e: any) => {
+            const assignedDrone = state.drones.find((d: any) => d.targetId === e.id);
+            renderEnemy(e, assignedDrone || null);
+        });
 
         // Damage Numbers
         state.damageNumbers.forEach((d: any) => {
@@ -1594,17 +1781,39 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         }
 
         // Render Auto-Target Drones (Cores)
-        for(let i = 0; i < cfg.cores; i++) {
-            const angle = (now * 2) + (Math.PI * 2 / cfg.cores) * i;
-            const dist = state.player.radius + 25;
+        // Drones
+        state.drones.forEach((drone: any) => {
+            const dist = 80;
+            const dx = Math.cos(drone.orbitAngle) * dist;
+            const dy = Math.sin(drone.orbitAngle) * dist;
+            
+            // Draw drone body
             ctx.beginPath();
-            ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#00D9FF';
-            ctx.shadowColor = '#00D9FF';
+            ctx.arc(dx, dy, 6, 0, Math.PI * 2);
+            ctx.fillStyle = drone.targetId !== null ? '#f87171' : '#38bdf8';
+            ctx.shadowColor = drone.targetId !== null ? '#ef4444' : '#0ea5e9';
             ctx.shadowBlur = 10;
             ctx.fill();
-            ctx.shadowBlur = 0; // reset
-        }
+            ctx.shadowBlur = 0; 
+            
+            // Draw drone laser pointer to target
+            if (drone.targetId !== null) {
+                const target = state.enemies.find((e: any) => e.id === drone.targetId);
+                if (target) {
+                    ctx.beginPath();
+                    ctx.moveTo(dx, dy);
+                    // inverse translate since we translated to `player.x, player.y`
+                    const tgtX = target.x - state.player.x;
+                    const tgtY = target.y - state.player.y;
+                    ctx.lineTo(tgtX, tgtY);
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+        });
 
         // Gun barrel / Player Sprite
         const dx = state.mouse.x - state.player.x;
@@ -1828,9 +2037,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                  const mx = (e.x / MAP_WIDTH) * mCanvas.width;
                  const my = (e.y / MAP_HEIGHT) * mCanvas.height;
                  
-                 mCtx.fillStyle = state.activeEnemies.has(e.id) ? '#38bdf8' : '#EF4444';
+                 const isActive = state.drones.some((d: any) => d.targetId === e.id);
+                 mCtx.fillStyle = isActive ? '#38bdf8' : '#EF4444';
                  mCtx.beginPath();
-                 mCtx.arc(mx, my, state.activeEnemies.has(e.id) ? 3 : 1.5, 0, Math.PI * 2);
+                 mCtx.arc(mx, my, isActive ? 3 : 1.5, 0, Math.PI * 2);
                  mCtx.fill();
               });
 
@@ -1950,14 +2160,28 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           PAUSE
         </button>
         <div className="flex flex-col items-end gap-2">
-        <div className="w-28 h-28 bg-[#111827]/90 border border-[#8B5CF6]/40 p-1 flex items-center justify-center relative overlow-hidden shadow-[0_0_10px_rgba(139,92,246,0.15)]">
-          {/* Minimap Canvas */}
-          <canvas ref={minimapRef} width={100} height={100} className="w-full h-full bg-[#0A0F1F] border border-[#111827] relative" />
-          <div className="absolute -bottom-2 -left-2 bg-[#8B5CF6] text-white text-[9px] font-mono px-1.5 py-0.5 rounded-sm">MAP</div>
-        </div>
-        <div className="bg-[#111827]/90 border border-[#EF4444]/40 px-3 py-1.5 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
-           <span ref={targetsRef} className="text-[10px] text-[#EF4444] font-mono font-bold">TARGETS: 0</span>
-        </div>
+           <div className="w-28 h-28 bg-[#111827]/90 border border-[#8B5CF6]/40 p-1 flex items-center justify-center relative overlow-hidden shadow-[0_0_10px_rgba(139,92,246,0.15)]">
+             {/* Minimap Canvas */}
+             <canvas ref={minimapRef} width={100} height={100} className="w-full h-full bg-[#0A0F1F] border border-[#111827] relative" />
+             <div className="absolute -bottom-2 -left-2 bg-[#8B5CF6] text-white text-[9px] font-mono px-1.5 py-0.5 rounded-sm">MAP</div>
+           </div>
+           
+           <div className="flex flex-col items-end gap-1.5 w-full mt-1">
+              <div className="bg-[#111827]/90 border border-[#EF4444]/40 px-3 py-1.5 shadow-[0_0_10px_rgba(239,68,68,0.1)] w-full text-right">
+                 <span ref={targetsRef} className="text-[10px] text-[#EF4444] font-mono font-bold">TARGETS: 0</span>
+              </div>
+              
+              {/* CPU Algo indicator */}
+              <div className="bg-[#111827]/90 border border-[#f59e0b]/40 shadow-[0_0_10px_rgba(245,158,11,0.1)] flex flex-col w-full text-white">
+                 <div className="bg-[#f59e0b]/10 px-3 py-1 border-b border-[#f59e0b]/20 flex justify-between items-center gap-4">
+                    <span className="text-[9px] text-[#f59e0b] font-mono tracking-widest font-bold">CPU ALGO</span>
+                    <span ref={algoRef} className="text-[11px] text-white font-mono font-bold drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">FCFS</span>
+                 </div>
+                 <div ref={algoStatsRef} className="px-3 py-1 font-mono text-[9px] text-slate-300 text-right leading-tight min-h-[30px] flex flex-col justify-end">
+                    CORES: 2
+                 </div>
+              </div>
+           </div>
         </div>
       </div>
 
@@ -1968,13 +2192,28 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       >
       </div>
 
-      {/* Controls Info overlays */}
-      <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500 font-bold flex flex-col gap-1 pointer-events-none z-10">
-          <div>[W A S D] MOVE</div>
-          <div>[SHIFT]   BOOST</div>
-          <div>[MOUSE]   AIM & FIRE</div>
-          <div>[ESC]     PAUSE</div>
+      {/* Boss Warning Notification */}
+      <div 
+        ref={bossWarningUIRef} 
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50 flex flex-col items-center justify-center text-center opacity-0 transition-opacity duration-100"
+      >
+        <div className="text-4xl font-black text-[#EF4444] font-mono tracking-[0.3em] drop-shadow-[0_0_15px_rgba(239,68,68,1)] animate-pulse">
+            WARNING
+        </div>
+        <div className="text-sm font-bold text-[#F8FAFC] tracking-widest mt-2 uppercase bg-[#EF4444]/20 px-8 py-1 border border-[#EF4444]">
+            MAJOR THREAT INCOMING
+        </div>
       </div>
+
+      {/* Controls Info overlays */}
+      {!isTouchDevice && (
+        <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500 font-bold flex flex-col gap-1 pointer-events-none z-10 hidden md:flex">
+            <div>[W A S D] MOVE</div>
+            <div>[SHIFT]   BOOST</div>
+            <div>[MOUSE]   AIM & FIRE</div>
+            <div>[ESC]     PAUSE</div>
+        </div>
+      )}
 
       {/* Bottom: Weapon Slots & Ammo */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-6 items-end pointer-events-none z-10">
@@ -1998,18 +2237,78 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
         {/* Skills */}
         <div className="flex gap-2">
-          <div ref={dshRef} className="w-9 h-9 bg-[#111827] border border-[#8B5CF6] relative flex items-center justify-center font-mono text-[#8B5CF6] text-[10px]">
+          <div ref={dshRef} className="w-12 h-12 bg-[#111827] border border-slate-700 relative flex items-center justify-center font-mono text-slate-500 text-[10px]">
             DSH
             <div className="absolute -bottom-1 right-0 bg-[#8B5CF6] text-white px-1 text-[7px] rounded-sm">Q</div>
           </div>
-          <div ref={shdSkillRef} className="w-9 h-9 bg-[#111827] border border-slate-700 relative flex items-center justify-center font-mono text-slate-500 text-[10px]">
+          <div ref={shdSkillRef} className="w-12 h-12 bg-[#111827] border border-slate-700 relative flex items-center justify-center font-mono text-slate-500 text-[10px]">
             SHD
             <div className="absolute -bottom-1 right-0 bg-slate-700 text-white px-1 text-[7px] rounded-sm">E</div>
           </div>
         </div>
       </div>
       
-      <canvas ref={canvasRef} className="block w-full h-full z-0 cursor-none relative" />
+      {/* Mobile Controls Overlay */}
+      {isTouchDevice && (
+        <div className="absolute inset-x-0 bottom-8 z-20 pointer-events-none flex justify-between px-8 md:hidden">
+            <div className="pointer-events-auto opacity-70">
+                <VirtualJoystick 
+                    onMove={(x, y, active) => {
+                        mobileMoveRef.current = { x, y, active };
+                    }} 
+                    size={130} 
+                    color="rgba(239, 68, 68, 0.3)" 
+                />
+            </div>
+            
+            <div className="flex gap-4 items-end">
+                 <div className="flex flex-col gap-4 pointer-events-auto opacity-80">
+                     <button
+                         id="mobile-wpn-btn"
+                         onClick={() => {
+                             const e = new KeyboardEvent('keydown', { key: 'q' });
+                             window.dispatchEvent(e);
+                         }}
+                         className="w-12 h-12 rounded-full bg-[#111827] border-2 border-amber-500 font-bold text-[10px] text-white shadow-lg active:bg-slate-700 mx-auto"
+                     >
+                         WPN
+                     </button>
+                     <button
+                         id="mobile-shd-btn"
+                         onClick={() => {
+                             const e = new KeyboardEvent('keydown', { key: 'e' });
+                             window.dispatchEvent(e);
+                         }}
+                         className="w-12 h-12 rounded-full bg-[#111827] border-2 border-[#8B5CF6] font-bold text-[10px] text-white shadow-lg active:bg-slate-700 mx-auto"
+                     >
+                         SHD
+                     </button>
+                     <button
+                         id="mobile-boost-btn"
+                         data-active="false"
+                         onPointerDown={(e) => { e.currentTarget.dataset.active = "true"; }}
+                         onPointerUp={(e) => { e.currentTarget.dataset.active = "false"; }}
+                         onPointerCancel={(e) => { e.currentTarget.dataset.active = "false"; }}
+                         className="w-14 h-14 rounded-full bg-[#111827] border-2 border-slate-500 font-bold text-xs text-white shadow-lg active:bg-slate-700 active:scale-95 mx-auto"
+                     >
+                         DASH
+                     </button>
+                 </div>
+                 
+                 <div className="pointer-events-auto opacity-70 mb-4">
+                     <VirtualJoystick 
+                        onMove={(x, y, active) => {
+                            mobileAimRef.current = { x, y, active };
+                        }} 
+                        size={130} 
+                        color="rgba(0, 217, 255, 0.3)" 
+                     />
+                 </div>
+            </div>
+        </div>
+      )}
+
+      <canvas ref={canvasRef} className="block w-full h-full z-0 cursor-none relative touch-none" />
 
       {isPaused && (
         <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6">

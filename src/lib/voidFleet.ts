@@ -254,14 +254,31 @@ export class ShipRenderer {
     }
   }
 
+  get hasSprites(): boolean {
+    return this.base.img != null && this.base.img.naturalWidth > 0;
+  }
+
   /**
    * Draw the ship centred at (x, y).
    * Layer order: Base → Engine → Shield → Weapons  (or Destruction when dead)
    */
   draw(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const s = this.scale;
+    if (!this.hasSprites) {
+        // Fallback drawing if sprites failed to load
+        ctx.beginPath();
+        ctx.arc(x, y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.alive ? '#94a3b8' : '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#F8FAFC';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        return;
+    }
+    
     if (this.alive) {
       this.base.draw(ctx, x, y, s);
+
       this.engine.draw(ctx, x, y, s);
       if (this.shielded) this.shield?.draw(ctx, x, y, s);
       if (this.firing)   this.weapons?.draw(ctx, x, y, s);
