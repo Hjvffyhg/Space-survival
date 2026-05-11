@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { soundManager } from '../lib/audio';
 import { VirtualJoystick } from './VirtualJoystick';
 import { loadShip, loadProjectile, loadAllProjectiles, ShipRenderer, SHIP_CONFIGS, PROJECTILE_CONFIGS, AnimSprite, ShipName, ShipSprites } from '../lib/voidFleet';
+import { generateNebula, generatePlanet } from '../lib/proceduralGraphics';
+import { getSavedLayout, HudLayout, DEFAULT_LAYOUT } from '../lib/hudLayout';
+import { HudEditor } from './HudEditor';
 
 export type SchedulerAlgo = 'FCFS' | 'RR' | 'HRRN';
 
@@ -18,7 +21,7 @@ const ASSETS_CACHE: {
 
 interface GameCanvasProps {
   gameKey: number;
-  onGameOver: (score: number) => void;
+  onGameOver: (score: number, isVictory?: boolean) => void;
   onReturnMenu: () => void;
   civilizationLevel?: number;
 }
@@ -53,6 +56,15 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
+  const [isHudEditorOpen, setIsHudEditorOpen] = useState(false);
+  const [hudLayout, setHudLayout] = useState<HudLayout>(getSavedLayout());
+  const [droneRange, setDroneRange] = useState(1000);
+  const droneRangeRef = useRef(1000);
+  
+  useEffect(() => {
+    droneRangeRef.current = droneRange;
+  }, [droneRange]);
+
   const isDeadRef = useRef(false);
 
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -75,9 +87,9 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   }, [onGameOver]);
 
   useEffect(() => {
-    const img = new Image();
-    img.src = '/assets/asteroids.png';
-    img.onload = () => {
+      const img = new Image();
+      img.src = '/assets/asteroids.png';
+      img.onload = () => {
       asteroidSpriteRef.current = img;
     };
   }, []);
@@ -107,6 +119,12 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
     let lastTime = performance.now();
     let isAssetsLoaded = false;
     let playerRenderer: ShipRenderer;
+    let nebulaCanvas: HTMLCanvasElement;
+    let planetBlueRing: HTMLCanvasElement;
+    let planetPurpleRing: HTMLCanvasElement;
+    let planetOrange: HTMLCanvasElement;
+    let planetRed: HTMLCanvasElement;
+    let planetGreen: HTMLCanvasElement;
 
     async function initAssets() {
       if (!ASSETS_CACHE.projectiles) {
@@ -170,30 +188,52 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       state.player.baseSpeed = sStat.baseSpeed * (1.0 + (upgrades.speed * 0.1));
       state.player.damageMult = 1.0 + (upgrades.dmg * 0.2);
 
+      nebulaCanvas = generateNebula(MAP_WIDTH, MAP_HEIGHT);
+      planetBlueRing = generatePlanet('blue-ring');
+      planetPurpleRing = generatePlanet('purple-ring');
+      planetOrange = generatePlanet('orange-gas');
+      planetRed = generatePlanet('red-planet');
+      planetGreen = generatePlanet('green-earth');
+
       isAssetsLoaded = true;
       // Restart timing to avoid huge jump
       lastTime = performance.now();
       loop(lastTime);
     }
 
+    const applyPool = (arr: any[]) => {
+      arr.push = function(item: any) {
+         const idx = this.findIndex((x: any) => x.life <= 0);
+         if (idx !== -1) {
+            this[idx] = item;
+            return this.length;
+         }
+         return Array.prototype.push.call(this, item);
+      };
+      return arr;
+    };
+
     const state = {
       player: { 
-          x: 0, y: 0, hp: 100, maxHp: 100, radius: 30, ammo: 150, shield: 0, 
+          x: 0, y: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, radius: 30, ammo: 150, shield: 0, 
           speedTimer: 0, weaponTimer: 0, stamina: 100,
           selectedWeapon: 1, dashCooldown: 0, shieldCooldown: 0,
-          baseSpeed: 450, damageMult: 1.0
+          baseSpeed: 450, damageMult: 1.0, regenDelay: 0, isBoosting: false
       },
-      bullets: [] as any[],
-      enemyBullets: [] as any[],
-      particles: [] as any[],
-      damageNumbers: [] as any[],
+      bullets: applyPool([]),
+      enemyBullets: applyPool([]),
+      particles: applyPool([]),
+      damageNumbers: applyPool([]),
       asteroids: [] as any[],
       collectibles: [] as any[],
       enemies: [] as any[],
       readyQueue: [] as number[],
       currentAlgo: 'FCFS' as SchedulerAlgo,
       drones: [] as any[],
+      respawnQueue: [] as any[],
       isOutsideSafeZone: false,
+      isPlayerInLeak: false,
+      empTimer: 0,
       score: 0,
       lastSpawnTime: lastTime / 1000,
       lastItemSpawnTime: lastTime / 1000,
@@ -210,7 +250,9 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       pendingBoss: null as any,
       showBossWarning: false,
       notification: { time: 0, text1: '', text2: '' },
-      autoPilot: false
+      autoPilot: false,
+      anomalies: [] as any[],
+      bossesSpawned: { boss: false, boss_rr: false, boss_hrrn: false }
     };
 
     const MAP_WIDTH = 3000;
@@ -219,7 +261,8 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
     const stars = Array.from({ length: 3000 }).map(() => ({
       x: Math.random() * MAP_WIDTH * 3 - MAP_WIDTH,
       y: Math.random() * MAP_HEIGHT * 3 - MAP_HEIGHT,
-      r: Math.random() * 1.5 + 0.2,
+      r: Math.random() > 0.95 ? 6 : (Math.random() > 0.5 ? 4 : 2), // chunky sizes
+      isRare: Math.random() > 0.96, // draws a cross
       alpha: Math.random() * 0.8 + 0.1,
       twinkle: Math.random() * Math.PI * 2,
       parallax: Math.random() * 0.6 + 0.2
@@ -237,7 +280,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             angle: Math.random() * Math.PI * 2,
             spin: (Math.random() - 0.5) * 2,
             hp: 200 + civilizationLevel * 100,
-            spriteIdxX: Math.floor(Math.random() * 7),
+            spriteIdxX: Math.floor(Math.random() * 8),
             spriteIdxY: Math.floor(Math.random() * 4)
         });
     }
@@ -300,13 +343,12 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       state.mobileAim = mobileAimRef.current;
 
       if (state.isGameOver) {
-          // just render the last frame repeatedly to prevent black flash
-          const cameraX = Math.max(0, Math.min(MAP_WIDTH - canvas.width, state.player.x - canvas.width / 2));
-          const cameraY = Math.max(0, Math.min(MAP_HEIGHT - canvas.height, state.player.y - canvas.height / 2));
-          render(ctx, canvas, state, cameraX, cameraY);
+          // Pause the game completely
+          lastTime = time;
           return;
       }
 
+      let prevHp = state.player.hp;
       state.diffTimer += dt;
       const now = time / 1000;
 
@@ -337,15 +379,17 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       
       state.currentAlgo = cfg.algo;
 
+      const generateGarbage = (len: number) => Array.from({length: len}).map(() => String.fromCharCode(33 + Math.floor(Math.random() * 94))).join('');
+
       // Update refs
-      if (waveRef.current) waveRef.current.innerText = currentWave.toString().padStart(2, '0');
+      if (waveRef.current) waveRef.current.innerText = state.isPlayerInLeak ? generateGarbage(2) : currentWave.toString().padStart(2, '0');
       if (timeRef.current) {
         const m = Math.floor(state.diffTimer / 60);
         const s = Math.floor(state.diffTimer % 60);
-        timeRef.current.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        timeRef.current.innerText = state.isPlayerInLeak ? generateGarbage(5) : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
       }
-      if (targetsRef.current) targetsRef.current.innerText = `TARGETS: ${state.enemies.length}`;
-      if (algoRef.current) algoRef.current.innerText = cfg.algo;
+      if (targetsRef.current) targetsRef.current.innerText = state.isPlayerInLeak ? generateGarbage(8) : `TARGETS: ${state.enemies.length}`;
+      if (algoRef.current) algoRef.current.innerText = state.isPlayerInLeak ? generateGarbage(4) : cfg.algo;
       if (algoStatsRef.current) {
           let stats = `CORES: ${cfg.cores}`;
           if (cfg.algo === 'RR') stats += `<br/><span class="text-[#f43f5e]">QUANTUM: ${cfg.quantum.toFixed(1)}s</span>`;
@@ -404,52 +448,73 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
 
       // 1. Spawning
-      let spawnInterval = Math.max(0.1, 2.0 - (state.diffTimer / 60) - (civilizationLevel * 0.2)); // harder over time
-      const scaler = 1 + (civilizationLevel * 0.3) + (state.score / 5000) + (state.diffTimer / 300);
+      let spawnInterval = Math.max(0.5, 2.5 - (state.diffTimer / 120) - (civilizationLevel * 0.2)); // harder over time, capped at 0.5s
+      const scaler = 1 + (civilizationLevel * 0.2) + (state.score / 8000) + (state.diffTimer / 600); // gentler scaling
 
-      if (now - state.lastSpawnTime > spawnInterval) {
+      let maxEnemies = 15 + Math.floor(state.diffTimer / 15);
+      if (maxEnemies > 45) maxEnemies = 45; // Hard cap on active enemies to prevent lag and overwhelm
+
+      if (now - state.lastSpawnTime > spawnInterval && state.enemies.length < maxEnemies) {
+        // Formations: 25% chance to spawn a formation of 2 to 4 enemies instead of a single one.
+        const spawnCount = Math.random() < 0.25 ? Math.floor(Math.random() * 3) + 2 : 1;
         const side = Math.floor(Math.random() * 4);
-        let ex = 0, ey = 0;
-        if (side === 0) { ex = Math.random() * MAP_WIDTH; ey = -30; } 
-        else if (side === 1) { ex = MAP_WIDTH + 30; ey = Math.random() * MAP_HEIGHT; } 
-        else if (side === 2) { ex = Math.random() * MAP_WIDTH; ey = MAP_HEIGHT + 30; } 
-        else { ex = -30; ey = Math.random() * MAP_HEIGHT; }
-        
-        // As time progresses, more tanks and new enemies
-        const r = Math.random();
-        let type = 'grunt';
-        let maxHp = 30 * scaler;
-        let damage = 15 * scaler;
-        let S = 1.0;
-        let color = '#EF4444';
-        let speed = 140 * (1 + (scaler - 1) * 0.5);
-        let radius = 12;
+        const formationBaseX = (side === 0 || side === 2) ? Math.random() * MAP_WIDTH : (side === 1 ? MAP_WIDTH + 30 : -30);
+        const formationBaseY = (side === 1 || side === 3) ? Math.random() * MAP_HEIGHT : (side === 2 ? MAP_HEIGHT + 30 : -30);
 
-        if (state.diffTimer > 45 && Math.random() < 0.03 && state.bossWarningTimer <= 0) { // Boss spawn chance
-            const bossRand = Math.random();
-            if (bossRand < 0.33) {
+        for (let f = 0; f < spawnCount; f++) {
+            if (state.enemies.length >= maxEnemies) break;
+
+            let ex = formationBaseX + (Math.random() - 0.5) * 80;
+            let ey = formationBaseY + (Math.random() - 0.5) * 80;
+            
+            // As time progresses, more tanks and new enemies
+            const r = Math.random();
+            let type = 'grunt';
+            let maxHp = 30 * scaler;
+            let damage = 10 * (1 + (scaler - 1) * 0.3);
+            let S = 1.0;
+            let color = '#EF4444';
+            let speed = 140 * (1 + (scaler - 1) * 0.5);
+            let radius = 12;
+
+            let spawnBoss = null;
+            if (f === 0) { // Only spawn boss once per spawn cycle
+                if (state.diffTimer > 25 && !state.bossesSpawned.boss) {
+                    spawnBoss = 'boss';
+                    state.bossesSpawned.boss = true;
+                } else if (state.diffTimer > 55 && !state.bossesSpawned.boss_rr) {
+                    spawnBoss = 'boss_rr';
+                    state.bossesSpawned.boss_rr = true;
+                } else if (state.diffTimer > 85 && !state.bossesSpawned.boss_hrrn) {
+                    spawnBoss = 'boss_hrrn';
+                    state.bossesSpawned.boss_hrrn = true;
+                }
+            }
+
+        if (spawnBoss && state.bossWarningTimer <= 0) {
+            if (spawnBoss === 'boss') {
                 type = 'boss';
                 maxHp = 1000 * scaler;
-                radius = 45;
+                radius = 120; // Fixed radius to match image properly
                 speed = 25 * (1 + (scaler - 1) * 0.1);
-            } else if (bossRand < 0.66) {
+            } else if (spawnBoss === 'boss_rr') {
                 type = 'boss_rr'; // Cycler
-                maxHp = 3000 * scaler;
+                maxHp = 2000 * scaler;
                 radius = 140; // Massive
                 speed = 10;
             } else {
                 type = 'boss_hrrn'; // Executor
-                maxHp = 3500 * scaler;
+                maxHp = 3000 * scaler;
                 radius = 160; // Huge
                 speed = 5;
             }
-            damage = 50 * scaler;
+            damage = 30 * (1 + (scaler - 1) * 0.5);
             S = type === 'boss' ? 20.0 : 40.0;
             color = '#ec4899'; // Pink
         } else if (state.diffTimer > 75 && r < 0.15) { // Turret
             type = 'turret';
             maxHp = 150 * scaler;
-            damage = 15 * scaler;
+            damage = 15 * (1 + (scaler - 1) * 0.4);
             S = 5.0;
             color = '#14b8a6'; // Teal
             speed = 0; // Stationary
@@ -457,7 +522,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         } else if (state.diffTimer > 30 && r < 0.25) { // Kamikaze
             type = 'kamikaze';
             maxHp = 15 * scaler;
-            damage = 80 * scaler; // High bump damage
+            damage = 40 * (1 + (scaler - 1) * 0.4); // High bump damage
             S = 0.5;
             color = '#f97316'; // Orange
             speed = 350 * (1 + (scaler - 1) * 0.3); // Very fast
@@ -465,7 +530,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         } else if (r > Math.max(0.3, 0.8 - (state.diffTimer / 100))) {
             type = 'tank';
             maxHp = 100 * scaler;
-            damage = 25 * scaler;
+            damage = 25 * (1 + (scaler - 1) * 0.4);
             S = 3.0;
             color = '#8B5CF6'; // Purple
             speed = 60 * (1 + (scaler - 1) * 0.5);
@@ -511,8 +576,51 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             soundManager.playEnemySpawn();
         }
 
+        }
+        
         state.lastSpawnTime = now;
       }
+
+      if (!state.respawnQueue) state.respawnQueue = [];
+      state.respawnQueue = state.respawnQueue.filter((rq: any) => {
+          rq.timer -= dt;
+          if (rq.timer <= 0) {
+              const newId = Math.random();
+              
+              let shipName: ShipName | null = 'Fighter';
+              if (rq.type === 'grunt') shipName = 'Scout';
+              else if (rq.type === 'tank') shipName = 'Dreadnought';
+              else if (rq.type === 'kamikaze') shipName = 'Bomber';
+              else if (rq.type === 'turret') shipName = 'Support ship';
+              else shipName = null;
+              
+              let renderer = shipName ? new ShipRenderer(ASSETS_CACHE.ships[shipName]!, SHIP_CONFIGS[shipName], (rq.radius * 3.6) / SHIP_CONFIGS[shipName].size) : null;
+              if (renderer && !renderer.hasSprites) renderer = null;
+
+              const spawnAngle = Math.random() * Math.PI * 2;
+              const spawnDist = 900 + Math.random() * 300; 
+              const spawnX = Math.max(0, Math.min(MAP_WIDTH, state.player.x + Math.cos(spawnAngle) * spawnDist));
+              const spawnY = Math.max(0, Math.min(MAP_HEIGHT, state.player.y + Math.sin(spawnAngle) * spawnDist));
+
+              state.enemies.push({
+                   id: newId,
+                   type: rq.type,
+                   x: spawnX, y: spawnY,
+                   maxHp: rq.maxHp, hp: rq.maxHp,
+                   damage: rq.damage,
+                   W: 0, S: rq.S, color: rq.color, speed: rq.speed, radius: rq.radius,
+                   spawnScale: 0.1,
+                   dashTimer: 0, shootTimer: 0, flashTimer: 0,
+                   renderer,
+                   respawnCount: rq.respawnCount,
+                   isRespawned: true
+              });
+              state.readyQueue.push(newId);
+              soundManager.playEnemySpawn();
+              return false; // remove from respawnQueue
+          }
+          return true; // keep holding
+      });
 
       if (state.bossWarningTimer > 0) {
           state.bossWarningTimer -= dt;
@@ -571,8 +679,13 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             if (!e) {
                 drone.targetId = null;
             } else {
-                if (cfg.algo === 'FCFS') {
-                   // FCFS purely processes until the entity is dead. Never preempts.
+                const distToPlayer = Math.hypot(e.x - state.player.x, e.y - state.player.y);
+                if (distToPlayer > droneRangeRef.current) {
+                    // Target moved out of range, preempt and hold in queue
+                    state.readyQueue.push(drone.targetId);
+                    drone.targetId = null;
+                } else if (cfg.algo === 'FCFS') {
+                   // FCFS purely processes until the entity is dead. Never preempts (while in range).
                 } else if (cfg.algo === 'RR') {
                    drone.timeRemaining -= dt;
                    if (drone.timeRemaining <= 0) {
@@ -594,19 +707,31 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
          if (drone.targetId === null && state.readyQueue.length > 0) {
             let nextEnemyId: number | null = null;
             
-            if (cfg.algo === 'FCFS' || cfg.algo === 'RR') {
-               // Queue is explicit. Grab the first element.
-               nextEnemyId = state.readyQueue[0];
-            } else if (cfg.algo === 'HRRN') {
-               // Find ready enemy with highest response ratio
-               let maxRatio = -1;
-               for (const id of state.readyQueue) {
-                  const x = state.enemies.find((e: any) => e.id === id);
-                  if (x) {
-                     const R = (x.W + x.S) / x.S;
+            const inRangeEnemies = state.readyQueue
+               .map(id => state.enemies.find((x: any) => x.id === id))
+               .filter(e => e && Math.hypot(e.x - state.player.x, e.y - state.player.y) <= droneRangeRef.current);
+
+            if (inRangeEnemies.length > 0) {
+               if (cfg.algo === 'FCFS') {
+                  // FCFS: Target the enemy with the absolute longest accumulated Wait Time (W)
+                  let maxW = -1;
+                  for (const e of inRangeEnemies) {
+                     if (e.W > maxW) {
+                        maxW = e.W;
+                        nextEnemyId = e.id;
+                     }
+                  }
+               } else if (cfg.algo === 'RR') {
+                  // RR: Target the first enemy in the queue order (Round Robin cycling)
+                  nextEnemyId = inRangeEnemies[0].id;
+               } else if (cfg.algo === 'HRRN') {
+                  // HRRN: Target the enemy with the Highest Response Ratio R = (W+S)/S
+                  let maxRatio = -1;
+                  for (const e of inRangeEnemies) {
+                     const R = (e.W + e.S) / Math.max(0.1, e.S); // prevent div/0
                      if (R > maxRatio) {
                         maxRatio = R;
-                        nextEnemyId = id;
+                        nextEnemyId = e.id;
                      }
                   }
                }
@@ -639,6 +764,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       // Weapon Select
       if (state.keys['1']) state.player.selectedWeapon = 1;
       if (state.keys['2']) state.player.selectedWeapon = 2;
+      if (state.keys['x']) {
+          state.player.selectedWeapon = state.player.selectedWeapon === 1 ? 2 : 1;
+          state.keys['x'] = false;
+      }
 
       // Skills
       if (state.keys['e'] && state.player.stamina >= 20 && state.player.shieldCooldown <= 0) {
@@ -660,49 +789,153 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       if (state.autoPilot) {
          let closestDist = Infinity;
          let closestEnemy: any = null;
+         let bossEnemy: any = null;
          state.enemies.forEach((e: any) => {
+             if (e.type === 'boss') bossEnemy = e;
              const d = Math.hypot(e.x - state.player.x, e.y - state.player.y);
              if (d < closestDist) {
                  closestDist = d;
                  closestEnemy = e;
              }
          });
-         if (closestEnemy) {
-             const dx = closestEnemy.x - state.player.x;
-             const dy = closestEnemy.y - state.player.y;
-             
-             state.mouse.x = closestEnemy.x;
-             state.mouse.y = closestEnemy.y;
-             state.mouse.down = true; // autoshoot
 
-             if (closestDist > 500) {
-                 vx += dx / closestDist;
-                 vy += dy / closestDist;
-             } else if (closestDist < 250) {
-                 vx -= dx / closestDist;
-                 vy -= dy / closestDist;
+         const target = bossEnemy || closestEnemy;
+         
+         if (target) {
+             const distToTarget = Math.hypot(target.x - state.player.x, target.y - state.player.y);
+             const dx = target.x - state.player.x;
+             const dy = target.y - state.player.y;
+             
+             state.mouse.x = target.x;
+             state.mouse.y = target.y;
+             state.mouse.down = true; 
+
+             const optimalDist = target.type === 'boss' ? 400 : 250;
+             if (distToTarget > optimalDist + 150) {
+                 vx += dx / distToTarget * 1.0;
+                 vy += dy / distToTarget * 1.0;
+             } else if (distToTarget < optimalDist - 50) {
+                 vx -= dx / distToTarget * 1.5;
+                 vy -= dy / distToTarget * 1.5;
              } else {
-                 vx -= dy / closestDist;
-                 vy += dx / closestDist;
+                 vx -= dy / distToTarget * 0.8;
+                 vy += dx / distToTarget * 0.8;
              }
          } else {
              state.mouse.down = false;
          }
          
-         // evade bullets
-         state.enemyBullets.forEach((b: any) => {
-             const d = Math.hypot(b.x - state.player.x, b.y - state.player.y);
-             if (d < 180) {
-                 vx -= (b.x - state.player.x) / d * 1.5;
-                 vy -= (b.y - state.player.y) / d * 1.5;
+         // Priority 2: Collectibles
+         let closestColDist = Infinity;
+         let closestCol: any = null;
+         state.collectibles.forEach((c: any) => {
+             const d = Math.hypot(c.x - state.player.x, c.y - state.player.y);
+             if (d < closestColDist && d < 800) {
+                 if (c.type === 'health' && state.player.hp < 50) {
+                     closestColDist = d - 500; // high priority if low HP
+                 } else {
+                     closestColDist = d;
+                 }
+                 closestCol = c;
              }
          });
          
-         // bounds check
-         if (state.player.x < 150) vx += 1;
-         if (state.player.x > MAP_WIDTH - 150) vx -= 1;
-         if (state.player.y < 150) vy += 1;
-         if (state.player.y > MAP_HEIGHT - 150) vy -= 1;
+         if (closestCol) {
+             const d = Math.hypot(closestCol.x - state.player.x, closestCol.y - state.player.y);
+             const weight = d < 200 ? 2.5 : 1.2;
+             vx += (closestCol.x - state.player.x) / d * weight;
+             vy += (closestCol.y - state.player.y) / d * weight;
+         }
+
+         // Priority 3: Evade Bullets
+         state.enemyBullets.forEach((b: any) => {
+             if (b.life <= 0) return;
+             const d = Math.hypot(b.x - state.player.x, b.y - state.player.y);
+             if (d < 250) {
+                 const force = Math.pow(1 - (d / 250), 2);
+                 vx -= (b.x - state.player.x) / d * force * 5.0;
+                 vy -= (b.y - state.player.y) / d * force * 5.0;
+                 
+                 // Emergency Dash
+                 if (d < 80 && state.player.dashCooldown <= 0 && state.player.stamina >= 15) {
+                     state.player.stamina -= 15;
+                     state.player.dashCooldown = 3.0;
+                     state.player.speedTimer = Math.max(state.player.speedTimer, 0.5);
+                     soundManager.playCollect('speed');
+                 }
+             }
+         });
+
+         // Priority 4: Evade other enemies getting too close
+         state.enemies.forEach((e: any) => {
+             const d = Math.hypot(e.x - state.player.x, e.y - state.player.y);
+             const avoidDist = e.radius + state.player.radius + 120;
+             if (d < avoidDist && e !== target) {
+                 const force = 1 - (d / avoidDist);
+                 vx -= (e.x - state.player.x) / d * force * 3.5;
+                 vy -= (e.y - state.player.y) / d * force * 3.5;
+             }
+         });
+
+         // Priority 5: Avoid Asteroids
+         state.asteroids.forEach((a: any) => {
+             const d = Math.hypot(a.x - state.player.x, a.y - state.player.y);
+             const avoidDist = a.radius + state.player.radius + 150;
+             if (d < avoidDist) {
+                 const force = 1 - (d / avoidDist);
+                 vx -= (a.x - state.player.x) / d * force * 4.0;
+                 vy -= (a.y - state.player.y) / d * force * 4.0;
+             }
+         });
+
+         // Priority 6: Escape Black Holes
+         (state.anomalies || []).forEach((ano: any) => {
+             if (ano.type === 'black_hole') {
+                 const d = Math.hypot(ano.x - state.player.x, ano.y - state.player.y);
+                 const avoidDist = ano.r * 8.0; // Big escape radius
+                 if (d < avoidDist) {
+                     const force = 1 - (d / avoidDist);
+                     vx -= (ano.x - state.player.x) / d * force * 15.0; // Huge repulsive force to try and escape
+                     vy -= (ano.y - state.player.y) / d * force * 15.0;
+                     
+                     // Emergency Dash
+                     if (d < ano.r * 4.0 && state.player.dashCooldown <= 0 && state.player.stamina >= 15) {
+                         state.player.stamina -= 15;
+                         state.player.dashCooldown = 3.0;
+                         state.player.speedTimer = Math.max(state.player.speedTimer, 0.5);
+                         soundManager.playCollect('speed');
+                     }
+                 }
+             }
+         });
+
+         // AI Tactics: Weapon Choice
+         if (target) {
+            const dist = Math.hypot(target.x - state.player.x, target.y - state.player.y);
+            if (state.player.ammo > 0 && dist > 200 && dist < 700) {
+                state.player.selectedWeapon = 2; // Engage Missile
+            } else {
+                state.player.selectedWeapon = 1; // Standard Blaster
+            }
+         }
+         
+         // AI Tactics: Use Emergency Shield
+         if (state.player.hp < 60 && state.player.stamina >= 20 && state.player.shieldCooldown <= 0) {
+             const underFire = state.enemyBullets.some((b:any) => Math.hypot(b.x - state.player.x, b.y - state.player.y) < 200);
+             if (underFire) {
+                state.player.stamina -= 20;
+                state.player.shield = Math.min(100, state.player.shield + 20);
+                state.player.shieldCooldown = 5.0;
+                soundManager.playCollect('shield');
+             }
+         }
+         
+         // Bounds containment
+         const margin = 200;
+         if (state.player.x < margin) vx += Math.pow((margin - state.player.x) / margin, 2) * 5.0;
+         if (state.player.y < margin) vy += Math.pow((margin - state.player.y) / margin, 2) * 5.0;
+         if (state.player.x > MAP_WIDTH - margin) vx -= Math.pow((state.player.x - (MAP_WIDTH - margin)) / margin, 2) * 5.0;
+         if (state.player.y > MAP_HEIGHT - margin) vy -= Math.pow((state.player.y - (MAP_HEIGHT - margin)) / margin, 2) * 5.0;
       } else {
           if (state.mobileMove.active) {
               vx = state.mobileMove.x;
@@ -719,6 +952,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       
       let pSpeed = state.player.speedTimer > 0 ? state.player.baseSpeed * 1.8 : state.player.baseSpeed;
       let isBoosting = (state.keys['shift'] || document.getElementById('mobile-boost-btn')?.dataset.active === 'true') && len > 0;
+      state.player.isBoosting = isBoosting;
       
       if (isBoosting) {
           if (state.player.stamina > 0) {
@@ -742,29 +976,30 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           state.player.stamina = Math.min(100, state.player.stamina + 15 * dt);
       }
       
-      state.player.x += vx * pSpeed * dt;
-      state.player.y += vy * pSpeed * dt;
-      state.player.x = Math.max(state.player.radius, Math.min(MAP_WIDTH - state.player.radius, state.player.x));
-      state.player.y = Math.max(state.player.radius, Math.min(MAP_HEIGHT - state.player.radius, state.player.y));
+      const targetVx = vx * pSpeed;
+      const targetVy = vy * pSpeed;
+      const acceleration = isBoosting ? 12.0 : 6.0; // Momentum interpolation Factor
+      
+      state.player.vx += (targetVx - state.player.vx) * acceleration * dt;
+      state.player.vy += (targetVy - state.player.vy) * acceleration * dt;
 
       const BOUNDARY_MARGIN = 150;
-      if (state.player.x < BOUNDARY_MARGIN || state.player.x > MAP_WIDTH - BOUNDARY_MARGIN || 
-          state.player.y < BOUNDARY_MARGIN || state.player.y > MAP_HEIGHT - BOUNDARY_MARGIN) {
-          state.player.hp -= 20 * dt; // Take damage over time outside safe zone
-          state.isOutsideSafeZone = true;
-          if (state.player.hp <= 0) {
-             state.isGameOver = true;
-             soundManager.playExplosion();
-          }
-      } else {
-          state.isOutsideSafeZone = false;
-      }
+      state.player.x += state.player.vx * dt;
+      state.player.y += state.player.vy * dt;
+      state.player.x = Math.max(BOUNDARY_MARGIN + state.player.radius, Math.min(MAP_WIDTH - BOUNDARY_MARGIN - state.player.radius, state.player.x));
+      state.player.y = Math.max(BOUNDARY_MARGIN + state.player.radius, Math.min(MAP_HEIGHT - BOUNDARY_MARGIN - state.player.radius, state.player.y));
+
+      state.isOutsideSafeZone = false;
 
       // 4. Combat (Shooting)
+      if (state.player.ammo < 50) {
+          state.player.ammo += 15 * dt; // Passive ammo regen
+      }
+      
       const isWpn1 = state.player.selectedWeapon === 1;
       const fireRate = state.player.weaponTimer > 0 
            ? (isWpn1 ? 0.08 : 0.2) 
-           : (isWpn1 ? 0.15 : 0.4);
+           : (isWpn1 ? 0.12 : 0.35);
 
       if (state.mouse.down && state.player.ammo > 0 && now - state.lastFireTime > fireRate) { // fire rate
          const dx = state.mouse.x - state.player.x;
@@ -804,7 +1039,12 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                    });
                });
 
-               soundManager.playShoot();
+               // Recoil
+               const recoilStrength = isWpn1 ? 150 : 500;
+               state.player.vx -= (dx / d) * recoilStrength;
+               state.player.vy -= (dy / d) * recoilStrength;
+
+               soundManager.playShoot(!isWpn1); // pass isHeavy for pitch shifting and saw tone
                if (playerRenderer) playerRenderer.triggerWeapons();
                state.lastFireTime = now;
            }
@@ -812,6 +1052,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       }
 
       state.bullets.forEach((b: any) => {
+        if (b.life <= 0) return;
         if (b.isDrone) {
             let closestEnemy: any = null;
             let closestDist = 400; // Seeking radius
@@ -856,6 +1097,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         }
       });
       state.particles.forEach((p: any) => {
+        if (p.life <= 0) return;
         p.x += p.vx * dt; 
         p.y += p.vy * dt; 
         p.life -= dt;
@@ -868,7 +1110,13 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       });
 
       // 5. Enemy Actions
+      if (state.empTimer > 0) {
+          state.empTimer -= dt;
+      }
+
       state.enemyBullets.forEach((b: any) => {
+        if (b.life <= 0) return;
+        if (state.empTimer > 0) return;
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
         
         // hit player
@@ -897,9 +1145,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             }
         }
       });
-      state.enemyBullets = state.enemyBullets.filter((b: any) => b.life > 0);
+      // state.enemyBullets = state.enemyBullets.filter((b: any) => b.life > 0);
 
       state.enemies.forEach(e => {
+         if (state.empTimer > 0) return;
          if (e.renderer) e.renderer.update(dt);
          if (e.flashTimer === undefined) e.flashTimer = 0;
          if (e.flashTimer > 0) e.flashTimer -= dt;
@@ -954,7 +1203,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                          state.enemyBullets.push({
                              x: e.x + Math.cos(angle) * e.radius, y: e.y + Math.sin(angle) * e.radius,
                              vx: Math.cos(angle) * 150, vy: Math.sin(angle) * 150,
-                             life: 6.0, damage: e.damage, isBig: true
+                             life: 6.0, damage: e.damage, isBig: true, bulletType: 'boss_slow'
                          });
                      }
                      soundManager.playEnemyAttack();
@@ -965,7 +1214,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                          state.enemyBullets.push({
                              x: e.x + Math.cos(angle) * e.radius, y: e.y + Math.sin(angle) * e.radius,
                              vx: Math.cos(angle) * 250, vy: Math.sin(angle) * 250,
-                             life: 4.0, damage: e.damage / 2
+                             life: 4.0, damage: e.damage / 2, isBig: false, bulletType: 'boss_burst'
                          });
                      }
                      soundManager.playEnemyAttack();
@@ -997,7 +1246,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                          state.enemyBullets.push({
                              x: e.x + Math.cos(spiralAngle) * e.radius, y: e.y + Math.sin(spiralAngle) * e.radius,
                              vx: Math.cos(spiralAngle) * 250, vy: Math.sin(spiralAngle) * 250,
-                             life: 5.0, damage: e.damage, isBig: true
+                             life: 5.0, damage: e.damage, isBig: true, bulletType: 'boss_spiral'
                          });
                      }
                      soundManager.playEnemyAttack();
@@ -1010,7 +1259,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                          state.enemyBullets.push({
                              x: e.x + Math.cos(angle) * e.radius, y: e.y + Math.sin(angle) * e.radius,
                              vx: Math.cos(angle) * 150, vy: Math.sin(angle) * 150,
-                             life: 8.0, damage: e.damage / 2, isBig: false
+                             life: 8.0, damage: e.damage / 2, isBig: false, bulletType: 'boss_sweep'
                          });
                      }
                      soundManager.playEnemyAttack();
@@ -1018,7 +1267,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                  }
              } else if (e.type === 'boss_hrrn') {
                  // Decoupled from scheduling logic: base difficulty multiplier
-                 const hrrnMultiplier = 1;
+                 const hrrnMultiplier = Math.max(1, (e.W + e.S) / e.S);
 
                  if (e.laserTimer <= 0) {
                      // Focused charging blast
@@ -1028,7 +1277,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                          state.enemyBullets.push({
                              x: e.x + Math.cos(angle) * e.radius, y: e.y + Math.sin(angle) * e.radius,
                              vx: Math.cos(angle) * 350 * Math.max(1, hrrnMultiplier * 0.5), vy: Math.sin(angle) * 350 * Math.max(1, hrrnMultiplier * 0.5),
-                             life: 5.0, damage: e.damage * hrrnMultiplier, isBig: true
+                             life: 5.0, damage: e.damage * hrrnMultiplier, isBig: true, bulletType: 'boss_focused'
                          });
                      }
                      soundManager.playEnemyAttack();
@@ -1040,7 +1289,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                      state.enemyBullets.push({
                          x: e.x + Math.cos(angle) * e.radius, y: e.y + Math.sin(angle) * e.radius,
                          vx: Math.cos(angle) * 500, vy: Math.sin(angle) * 500,
-                         life: 6.0, damage: e.damage * hrrnMultiplier * 2, isBig: true // massive damage
+                         life: 6.0, damage: e.damage * hrrnMultiplier * 2, isBig: true, bulletType: 'boss_snipe' // massive damage
                      });
                      soundManager.playEnemyAttack();
                      e.shootTimer = Math.max(0.3, 2.0 / hrrnMultiplier);
@@ -1052,22 +1301,25 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
              // Turrets don't move or move very slowly. They just shoot towards player.
              e.shootTimer -= dt;
              if (e.shootTimer <= 0 && dist < 800) {
+                 const safeDist = Math.max(1, dist);
                  state.enemyBullets.push({
-                     x: e.x + (dx/dist)*e.radius,
-                     y: e.y + (dy/dist)*e.radius,
-                     vx: (dx/dist) * 250,
-                     vy: (dy/dist) * 250,
+                     x: e.x + (dx/safeDist)*e.radius,
+                     y: e.y + (dy/safeDist)*e.radius,
+                     vx: (dx/safeDist) * 250,
+                     vy: (dy/safeDist) * 250,
                      life: 4.0,
                      damage: e.damage,
-                     isBig: false
+                     isBig: false,
+                     bulletType: 'turret_standard'
                  });
                  soundManager.playEnemyAttack();
                  e.shootTimer = 1.0 + Math.random() * 0.5;
              }
          } else if (e.type === 'kamikaze') {
              // Charge directly at player quickly
-             e.x += (dx/dist) * e.speed * dt;
-             e.y += (dy/dist) * e.speed * dt;
+             const safeDist = Math.max(1, dist);
+             e.x += (dx/safeDist) * e.speed * dt;
+             e.y += (dy/safeDist) * e.speed * dt;
              
              if (dist <= e.radius + state.player.radius + 2) {
                  // Explode immediately on touch
@@ -1086,9 +1338,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                  soundManager.playExplosion();
              }
          } else {
+             const safeDist = Math.max(1, dist);
              if (dist > e.radius + state.player.radius + 2) {
-               e.x += (dx/dist) * e.speed * dt;
-               e.y += (dy/dist) * e.speed * dt;
+               e.x += (dx/safeDist) * e.speed * dt;
+               e.y += (dy/safeDist) * e.speed * dt;
              } else {
                // Melee damage
                const dmg = e.damage * dt;
@@ -1102,6 +1355,54 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                // We'll rely on the visual or trigger only occasionally. 
                // Let's add a small chance to play so it doesn't overwhelm
                if (Math.random() < 0.05) soundManager.playTakeDamage();
+             }
+             
+             // Grunt / Tank Shooting based on scheduler
+             if (e.shootTimer === undefined) e.shootTimer = Math.random() * 2.0 + 1.0;
+             e.shootTimer -= dt;
+             if (e.shootTimer <= 0) {
+                 const safeDist = Math.max(1, dist);
+                 let vx = 0, vy = 0, damage = e.damage, life = 4.0, bType = 'grunt_standard', count = 1;
+                 if (cfg.algo === 'FCFS') {
+                     // Fast, predictive, small damage
+                     bType = e.type === 'tank' ? 'tank_heavy' : 'grunt_fast';
+                     vx = (dx/safeDist) * (e.type === 'tank' ? 250 : 350);
+                     vy = (dy/safeDist) * (e.type === 'tank' ? 250 : 350);
+                     damage = e.type === 'tank' ? e.damage * 0.8 : e.damage * 0.4;
+                     e.shootTimer = e.type === 'tank' ? 3.0 : 2.0;
+                 } else if (cfg.algo === 'RR') {
+                     // Spread, medium damage
+                     bType = e.type === 'tank' ? 'tank_spread' : 'grunt_burst';
+                     vx = (dx/safeDist) * (e.type === 'tank' ? 250 : 350);
+                     vy = (dy/safeDist) * (e.type === 'tank' ? 250 : 350);
+                     damage = e.type === 'tank' ? e.damage * 0.5 : e.damage * 0.2;
+                     e.shootTimer = e.type === 'tank' ? 4.0 : 2.5;
+                     count = e.type === 'tank' ? 3 : 2;
+                 } else if (cfg.algo === 'HRRN') {
+                     const hrrnMultiplier = Math.max(1, (e.W + e.S) / e.S);
+                     bType = e.type === 'tank' ? 'tank_heavy' : 'grunt_snipe';
+                     vx = (dx/safeDist) * (e.type === 'tank' ? 300 : 450);
+                     vy = (dy/safeDist) * (e.type === 'tank' ? 300 : 450);
+                     damage = (e.type === 'tank' ? e.damage * 0.8 : e.damage * 0.5) * hrrnMultiplier;
+                     e.shootTimer = Math.max(1.0, 4.0 / hrrnMultiplier);
+                 }
+
+                 for(let i=0; i<count; i++) {
+                     let spreadAngle = (i - (count-1)/2) * 0.15;
+                     const baseAngle = Math.atan2(dy, dx);
+                     const angle = baseAngle + spreadAngle;
+                     state.enemyBullets.push({
+                         x: e.x + Math.cos(angle)*e.radius,
+                         y: e.y + Math.sin(angle)*e.radius,
+                         vx: Math.cos(angle) * Math.hypot(vx, vy),
+                         vy: Math.sin(angle) * Math.hypot(vx, vy),
+                         life: 5.0,
+                         damage: damage,
+                         isBig: e.type === 'tank',
+                         bulletType: bType
+                     });
+                 }
+                 if (dist < 1000) soundManager.playEnemyAttack();
              }
          }
       });
@@ -1122,11 +1423,12 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
               state.damageNumbers.push({
                  x: e.x + (Math.random() - 0.5) * 20,
                  y: e.y - e.radius - 10 + (Math.random() - 0.5) * 20,
-                 amount: dmg,
+                 amount: Math.ceil(dmg),
                  life: 1.0,
                  vy: -30
               });
               b.life = -1;
+              const color = b.isDrone ? '#00D9FF' : '#F59E0B';
               for (let i = 0; i < 6; i++) {
                 state.particles.push({
                    x: b.x,
@@ -1134,11 +1436,90 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                    vx: (Math.random() - 0.5) * 300,
                    vy: (Math.random() - 0.5) * 300,
                    life: 0.15 + Math.random() * 0.15,
-                   color: '#F59E0B'
+                   color: color
                 });
+              }
+              
+              if (b.isDrone) {
+                  // Distinct bright impact flare for homing lasers
+                  for (let i = 0; i < 3; i++) {
+                      state.particles.push({
+                          x: b.x,
+                          y: b.y,
+                          vx: (Math.random() - 0.5) * 100,
+                          vy: (Math.random() - 0.5) * 100,
+                          life: 0.1,
+                          color: '#FFFFFF'
+                      });
+                  }
               }
             }
          });
+
+         if (b.life > 0) {
+            state.enemyBullets.forEach(eb => {
+                if (eb.life <= 0 || b.life <= 0) return;
+                const dist = Math.hypot(b.x - eb.x, b.y - eb.y);
+                const collisionRadius = (eb.isBig ? 15 : 10) + 10;
+                if (dist < collisionRadius) {
+                    b.life = -1;
+                    eb.life = -1;
+                    
+                    soundManager.playExplosion();
+                    const explosionRadius = 60;
+                    
+                    // Explosion particles
+                    for (let i = 0; i < 15; i++) {
+                        state.particles.push({
+                           x: b.x, y: b.y,
+                           vx: (Math.random() - 0.5) * 500,
+                           vy: (Math.random() - 0.5) * 500,
+                           life: 0.3 + Math.random() * 0.3,
+                           maxLife: 0.6,
+                           radius: Math.random() * 5 + 2,
+                           color: Math.random() > 0.5 ? '#F59E0B' : '#EF4444' // Orange/Red explosion
+                        });
+                    }
+
+                    // AoE Damage Player
+                    if (Math.hypot(state.player.x - b.x, state.player.y - b.y) < explosionRadius + state.player.radius) {
+                         if (state.player.shield > 0) {
+                             state.player.shield = Math.max(0, state.player.shield - 20);
+                         } else {
+                             state.player.hp -= 20;
+                         }
+                         soundManager.playTakeDamage();
+                    }
+                    
+                    // AoE Damage Enemies
+                    state.enemies.forEach(e => {
+                        if (e.hp <= 0) return;
+                        if (Math.hypot(e.x - b.x, e.y - b.y) < explosionRadius + e.radius) {
+                            const dmg = 40;
+                            e.hp -= dmg;
+                            e.flashTimer = 0.1;
+                            state.damageNumbers.push({
+                                x: e.x + (Math.random() - 0.5) * 20,
+                                y: e.y - e.radius - 10,
+                                amount: Math.ceil(dmg),
+                                life: 1.0,
+                                vy: -30
+                            });
+                            if (e.hp <= 0 && e.renderer) e.renderer.triggerDestruction();
+                            else if (e.renderer) e.renderer.triggerShield();
+                        }
+                    });
+
+                    // AoE Damage Asteroids
+                    state.asteroids.forEach(a => {
+                        if (a.hp <= 0) return;
+                        if (Math.hypot(a.x - b.x, a.y - b.y) < explosionRadius + a.radius) {
+                            a.hp -= 40;
+                        }
+                    });
+                }
+            });
+         }
 
          if (b.life > 0) {
             state.asteroids.forEach(a => {
@@ -1168,6 +1549,144 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             });
          }
       });
+
+      // === SPACETIME ANOMALIES (RELATIVITY PHYSICS) ===
+      if (!state.anomalies) state.anomalies = [];
+      
+      if (Math.random() < dt * 0.015 && state.anomalies.length < 1 && state.score > 2000) {
+          let ax = Math.random() * MAP_WIDTH;
+          let ay = Math.random() * MAP_HEIGHT;
+          if (Math.hypot(ax - state.player.x, ay - state.player.y) > 800) {
+              state.anomalies.push({
+                  type: 'black_hole',
+                  x: ax, y: ay,
+                  r: 100, mass: 3500000,
+                  life: 30, rotation: 0
+              });
+              state.notification = { time: 5.0, text1: 'SPACETIME ANOMALY', text2: 'Severe Gravity Well Detected!' };
+              if ((soundManager as any).playBossWarning) (soundManager as any).playBossWarning();
+          }
+      }
+      if (Math.random() < dt * 0.01 && state.score > 1000 && !state.anomalies.some((a:any) => a.type === 'memory_leak')) {
+          let ax = Math.random() * MAP_WIDTH;
+          let ay = Math.random() * MAP_HEIGHT;
+          state.anomalies.push({
+              type: 'memory_leak',
+              x: ax, y: ay,
+              r: 20, maxRadius: 1000 + Math.random() * 500,
+              growthRate: 15,
+              state: 'growing',
+              life: 200,
+              sacrificeDist: 60,
+              rotation: 0
+          });
+          state.notification = { time: 5.0, text1: 'WARNING: NULL POINTER EXCEPTION', text2: 'Memory Leak Expanding!' };
+      }
+
+      state.isPlayerInLeak = false;
+
+      state.anomalies.forEach((ano: any) => {
+          ano.life -= dt;
+          ano.rotation += dt * 1.5;
+          if (ano.type === 'black_hole') {
+             const pull = (ent: any, isP = false) => {
+                 if (ent.hp !== undefined && ent.hp <= 0 && !isP) return;
+                 if (ent.life !== undefined && ent.life <= 0) return;
+                 
+                 const dx = ano.x - ent.x;
+                 const dy = ano.y - ent.y;
+                 const dist = Math.hypot(dx, dy);
+                 if (dist < 1600 && dist > 10) {
+                     const f = ano.mass / (dist * dist);
+                     ent.x += (dx / dist) * f * dt;
+                     ent.y += (dy / dist) * f * dt;
+                     
+                     // Spaghettification radius
+                     if (dist < ano.r * 0.8) {
+                         if (isP) ent.hp -= 300 * dt;
+                         else if (ent.life !== undefined) ent.life = -1;
+                         else ent.hp = 0;
+                     }
+                     
+                     // Time dilation (slow down objects near the event horizon roughly)
+                     if (!isP && ent.vx !== undefined && ent.vy !== undefined) {
+                         const dilation = Math.max(0.2, (dist / 1600));
+                         ent.x -= (ent.vx * dt) * (1 - dilation); 
+                         ent.y -= (ent.vy * dt) * (1 - dilation); 
+                     }
+                 }
+             };
+             pull(state.player, true);
+             state.enemies.forEach((e: any) => pull(e));
+             state.asteroids.forEach((a: any) => pull(a));
+             state.bullets.forEach((b: any) => pull(b));
+             state.enemyBullets.forEach((b: any) => pull(b));
+             state.collectibles.forEach((c: any) => pull(c));
+          } else if (ano.type === 'memory_leak') {
+             if (ano.state === 'growing') {
+                 ano.r += ano.growthRate * dt;
+                 if (ano.r >= ano.maxRadius) ano.state = 'imploding';
+             } else if (ano.state === 'imploding') {
+                 ano.r -= ano.growthRate * 6 * dt;
+                 if (ano.r <= 0) ano.life = -1;
+             }
+             
+             // Check Player Interaction
+             const pd = Math.hypot(state.player.x - ano.x, state.player.y - ano.y);
+             if (pd < ano.r) {
+                 state.isPlayerInLeak = true;
+                 state.player.stamina = Math.max(0, state.player.stamina - 15 * dt); // Data Corruption (Stamina Drain)
+                 
+                 // The Sacrifice (Manual Reboot)
+                 // Shift is boost, E is shield. We will just check if both states are essentially active/pressed
+                 if (pd < ano.sacrificeDist && ano.state === 'growing' && state.keys['shift'] && state.keys['e'] && state.player.stamina >= 10 && state.player.shield >= 10) {
+                     state.player.stamina = 0;
+                     state.player.shield = 0;
+                     ano.state = 'imploding';
+                     state.empTimer = 5.0;
+                     soundManager.playExplosion();
+                     state.notification = { time: 5.0, text1: 'SYSTEM REBOOT INITIATED', text2: 'Idle Execution Sequence Triggered!' };
+                     
+                     // EMP particles
+                     for (let i = 0; i < 50; i++) {
+                         state.particles.push({
+                             x: ano.x, y: ano.y,
+                             vx: (Math.random() - 0.5) * 800, vy: (Math.random() - 0.5) * 800,
+                             life: 2.0, maxLife: 2.0, radius: 5 + Math.random() * 10,
+                             color: '#34d399', isDebris: false, shape: 'rect'
+                         });
+                     }
+                 }
+             }
+
+             // Tactical Exploit (Corrupt enemies)
+             state.enemies.forEach((e: any) => {
+                 if (Math.hypot(e.x - ano.x, e.y - ano.y) < ano.r) {
+                     if (e.type === 'grunt' || e.type === 'tank') {
+                         e.hp -= (e.maxHp * 0.25) * dt; // dies in 4 seconds
+                         // corruption particles
+                         if (Math.random() < 0.2) {
+                             state.particles.push({
+                                 x: e.x + (Math.random() - 0.5) * e.radius,
+                                 y: e.y + (Math.random() - 0.5) * e.radius,
+                                 vx: 0, vy: -50, life: 1.0, maxLife: 1.0, radius: 3,
+                                 color: '#22c55e', isDebris: false, shape: 'rect'
+                             });
+                         }
+                     }
+                 }
+             });
+
+             // Powerup Glitch
+             state.collectibles.forEach((c: any) => {
+                 if (Math.hypot(c.x - ano.x, c.y - ano.y) < ano.r) {
+                     c.life -= dt * 2.0; // Decay twice as fast
+                 }
+             });
+          }
+      });
+      state.anomalies = state.anomalies.filter((a: any) => a.life > 0);
+
       state.asteroids = state.asteroids.filter(a => {
          if (a.hp <= 0) {
              soundManager.playExplosion();
@@ -1186,7 +1705,9 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                      spin: (Math.random() - 0.5) * 12,
                      isDebris: true,
                      angle: Math.random() * Math.PI * 2,
-                     shape: Math.random() > 0.5 ? 'rect' : 'tri'
+                     shape: 'sprite_debris',
+                     spriteIdxX: Math.floor(Math.random() * 8),
+                     spriteIdxY: Math.floor(Math.random() * 4)
                  });
              }
              return false;
@@ -1195,13 +1716,14 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       });
 
       // Cleanup & Stats
-      state.bullets = state.bullets.filter(b => b.life > 0);
-      state.particles = state.particles.filter((p: any) => p.life > 0);
+      // state.bullets = state.bullets.filter(b => b.life > 0);
+      // state.particles = state.particles.filter((p: any) => p.life > 0);
       state.damageNumbers.forEach((d: any) => {
+          if (d.life <= 0) return;
           d.y += d.vy * dt;
           d.life -= dt;
       });
-      state.damageNumbers = state.damageNumbers.filter((d: any) => d.life > 0);
+      // state.damageNumbers = state.damageNumbers.filter((d: any) => d.life > 0);
       let scoreGained = 0;
       state.enemies = state.enemies.filter(e => {
          if (e.hp <= 0) {
@@ -1247,6 +1769,25 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             }
 
             if (!e.renderer || e.renderer.fullyDead) {
+               if (['grunt', 'tank', 'kamikaze', 'turret'].includes(e.type)) {
+                   if (!state.respawnQueue) state.respawnQueue = [];
+                   if (e.respawnCount === undefined) e.respawnCount = 0;
+                   // Only casually respawn higher tier or rarely grunts, max 1 time.
+                   if (e.respawnCount < 1 && Math.random() < 0.25) { 
+                       state.respawnQueue.push({
+                           type: e.type,
+                           maxHp: e.maxHp * 1.1, // slightly stronger on respawn
+                           damage: e.damage * 1.1,
+                           S: e.S, color: e.color, speed: e.speed, radius: e.radius,
+                           timer: 15.0 + Math.random() * 10.0, // 15-25 seconds delay
+                           respawnCount: e.respawnCount + 1
+                       });
+                   }
+               }
+               if (e.type === 'boss_hrrn' && !state.isGameOver) {
+                    state.isGameOver = true;
+                    onGameOverRef.current(state.score + scoreGained, true);
+               }
                return false;
             }
          }
@@ -1261,7 +1802,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
               const dist = Math.hypot(c.x - state.player.x, c.y - state.player.y);
               if (dist < 20 + state.player.radius) { // pickup radius
                   if (c.type === 'health') {
-                      state.player.hp = Math.min(100, state.player.hp + 25);
+                      state.player.hp = Math.min(state.player.maxHp, state.player.hp + 25);
                   } else if (c.type === 'ammo') {
                       state.player.ammo += 30;
                   } else if (c.type === 'shield') {
@@ -1299,15 +1840,15 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       state.collectibles = state.collectibles.filter((c: any) => c.life > 0);
 
       // Update HUD safely
-      if (scoreRef.current) scoreRef.current.innerText = `${state.score}`;
+      if (scoreRef.current) scoreRef.current.innerText = state.isPlayerInLeak ? generateGarbage(6) : `${state.score}`;
       const hpPercent = Math.max(0, Math.floor((state.player.hp / state.player.maxHp) * 100));
-      if (hpTextRef.current) hpTextRef.current.innerText = `${Math.floor(state.player.hp)}`;
+      if (hpTextRef.current) hpTextRef.current.innerText = state.isPlayerInLeak ? generateGarbage(3) : `${Math.max(0, Math.floor(state.player.hp))}`;
       if (hpRef.current) hpRef.current.style.width = `${hpPercent}%`;
       const shieldPercent = Math.max(0, Math.floor(state.player.shield));
-      if (shieldTextRef.current) shieldTextRef.current.innerText = `${shieldPercent}%`;
+      if (shieldTextRef.current) shieldTextRef.current.innerText = state.isPlayerInLeak ? generateGarbage(3) : `${shieldPercent}%`;
       if (shieldRef.current) shieldRef.current.style.width = `${shieldPercent}%`;
       const staminaPercent = Math.max(0, Math.floor(state.player.stamina));
-      if (staminaTextRef.current) staminaTextRef.current.innerText = `${staminaPercent}%`;
+      if (staminaTextRef.current) staminaTextRef.current.innerText = state.isPlayerInLeak ? generateGarbage(3) : `${staminaPercent}%`;
       if (staminaRef.current) staminaRef.current.style.width = `${staminaPercent}%`;
       
       if (powerupRef.current) {
@@ -1386,13 +1927,13 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                   const dx = target.x - droneX;
                   const dy = target.y - droneY;
                   const dist = Math.hypot(dx, dy);
-                  if (dist < 1000) {
+                  if (dist < droneRangeRef.current) {
                       // Fire homing drone shot from Drone Pos
                       state.bullets.push({
                           x: droneX,
                           y: droneY,
-                          vx: (dx/dist) * 1200,
-                          vy: (dy/dist) * 1200,
+                          vx: (dx/Math.max(1, dist)) * 1200,
+                          vy: (dy/Math.max(1, dist)) * 1200,
                           life: 1.0,
                           damageMult: 0.5 * state.player.damageMult, // Drones do less damage than main gun
                           isDrone: true
@@ -1402,6 +1943,17 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
               }
           }
       });
+
+      // Passive HP Regeneration
+      if (state.player.hp < prevHp) {
+          state.player.regenDelay = 3.0; // Wait 3 seconds after taking damage
+      } else if (state.player.hp > 0 && state.player.hp < state.player.maxHp) {
+          if (state.player.regenDelay > 0) {
+              state.player.regenDelay -= dt;
+          } else if (!state.player.isBoosting && state.player.stamina > 0 && !state.isPlayerInLeak) {
+              state.player.hp = Math.min(state.player.maxHp, state.player.hp + 5 * dt); // 5 HP per second
+          }
+      }
 
       // 7. RENDER
       render(ctx, canvas, state, cameraX, cameraY);
@@ -1429,8 +1981,53 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         ctx.fillStyle = '#070a14'; // very dark blue space
         ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-        // Render Stars
         const now = performance.now() / 1000;
+
+        // Render Nebula
+        if (nebulaCanvas) {
+            ctx.save();
+            ctx.globalAlpha = 0.5;
+            // Draw slightly transformed to give deep parallax and slow drift
+            const nx = MAP_WIDTH/2 + cameraX * 0.05 + Math.sin(now * 0.05) * 100;
+            const ny = MAP_HEIGHT/2 + cameraY * 0.05 + Math.cos(now * 0.05) * 50;
+            ctx.translate(nx, ny);
+            ctx.drawImage(nebulaCanvas, -MAP_WIDTH/2, -MAP_HEIGHT/2, MAP_WIDTH, MAP_HEIGHT);
+            ctx.restore();
+        }
+        
+        // Render Planets
+        if (planetBlueRing) {
+            const px = MAP_WIDTH * 0.2 + cameraX * 0.1 - now * 0.5;
+            const py = MAP_HEIGHT * 0.4 + cameraY * 0.1 + Math.sin(now * 0.1) * 30;
+            const size = 48 * 8; // Scale up 8x for retro chunky pixel art
+            ctx.drawImage(planetBlueRing, px - size/2, py - size/2, size, size);
+        }
+        if (planetPurpleRing) {
+            const px = MAP_WIDTH * 0.8 + cameraX * 0.15 + now * 1;
+            const py = MAP_HEIGHT * 0.6 + cameraY * 0.15 - Math.cos(now * 0.2) * 20;
+            const size = 48 * 8; 
+            ctx.drawImage(planetPurpleRing, px - size/2, py - size/2, size, size);
+        }
+        if (planetOrange) {
+            const px = MAP_WIDTH * 0.6 + cameraX * 0.12 + now * 2;
+            const py = MAP_HEIGHT * 0.3 + cameraY * 0.12 + Math.sin(now * 0.15) * 40;
+            const size = 32 * 8; 
+            ctx.drawImage(planetOrange, px - size/2, py - size/2, size, size);
+        }
+        if (planetGreen) {
+            const px = MAP_WIDTH * 0.85 + cameraX * 0.2 - now * 3;
+            const py = MAP_HEIGHT * 0.8 + cameraY * 0.2 + Math.cos(now * 0.3) * 15;
+            const size = 16 * 8; 
+            ctx.drawImage(planetGreen, px - size/2, py - size/2, size, size);
+        }
+        if (planetRed) {
+            const px = MAP_WIDTH * 0.45 + cameraX * 0.18 + now * 0.8;
+            const py = MAP_HEIGHT * 0.25 + cameraY * 0.18 - Math.sin(now * 0.05) * 50;
+            const size = 16 * 8; 
+            ctx.drawImage(planetRed, px - size/2, py - size/2, size, size);
+        }
+
+        // Render Stars
         stars.forEach(star => {
            const px = star.x + cameraX * star.parallax;
            const py = star.y + cameraY * star.parallax;
@@ -1441,33 +2038,22 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                
                const twinkleAlpha = star.alpha + Math.sin(now * 3 + star.twinkle) * 0.2;
                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, twinkleAlpha)})`;
-               ctx.beginPath();
-               ctx.arc(px, py, star.r, 0, Math.PI * 2);
-               ctx.fill();
+               
+               if (star.isRare) {
+                   // Draw a retro glowing cross star
+                   const s = star.r * 2;
+                   ctx.fillRect(px - s/2, py - s/6, s, s/3); // horizontal bar
+                   ctx.fillRect(px - s/6, py - s/2, s/3, s); // vertical bar
+                   
+                   // Draw some extra glowing dots
+                   ctx.fillStyle = `rgba(147, 197, 253, ${Math.max(0, twinkleAlpha - 0.2)})`; // light blue
+                   ctx.fillRect(px - s/4, py - s/4, s/2, s/2);
+               } else {
+                   // Draw standard chunky pixel stars (squares instead of circles)
+                   ctx.fillRect(px, py, star.r, star.r);
+               }
            }
         });
-
-        // Grid (faint over space)
-        ctx.strokeStyle = 'rgba(17, 24, 39, 0.4)';
-        ctx.lineWidth = 1;
-        const gridS = 50;
-        ctx.beginPath();
-        
-        // draw grid only inside map bounds
-        const startX = Math.max(0, cameraX - (cameraX % gridS));
-        const startY = Math.max(0, cameraY - (cameraY % gridS));
-        const endX = Math.min(MAP_WIDTH, cameraX + canvas.width + gridS);
-        const endY = Math.min(MAP_HEIGHT, cameraY + canvas.height + gridS);
-        
-        for (let x = startX; x <= endX; x += gridS) { 
-            ctx.moveTo(Math.floor(x), Math.max(0, cameraY)); 
-            ctx.lineTo(Math.floor(x), Math.min(MAP_HEIGHT, cameraY + canvas.height)); 
-        }
-        for (let y = startY; y <= endY; y += gridS) { 
-            ctx.moveTo(Math.max(0, cameraX), Math.floor(y)); 
-            ctx.lineTo(Math.min(MAP_WIDTH, cameraX + canvas.width), Math.floor(y)); 
-        }
-        ctx.stroke();
 
         // Asteroids
         state.asteroids.forEach(a => {
@@ -1481,7 +2067,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             
             if (asteroidSpriteRef.current) {
                 const img = asteroidSpriteRef.current;
-                const cols = 7;
+                const cols = 8;
                 const rows = 4;
                 const sw = img.width / cols;
                 const sh = img.height / rows;
@@ -1528,32 +2114,116 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.restore();
         });
         
-        // Safe Zone Boundary
-        const BOUNDARY_MARGIN = 150;
-        ctx.strokeStyle = state.isOutsideSafeZone ? '#EF4444' : 'rgba(239, 68, 68, 0.4)';
-        ctx.lineWidth = state.isOutsideSafeZone ? 6 : 2;
-        ctx.setLineDash([20, 20]);
-        ctx.strokeRect(BOUNDARY_MARGIN, BOUNDARY_MARGIN, MAP_WIDTH - BOUNDARY_MARGIN * 2, MAP_HEIGHT - BOUNDARY_MARGIN * 2);
-        ctx.setLineDash([]);
-        
-        // Real Map Boundary
-        ctx.strokeStyle = '#991b1b';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-
-        // Warning Overlay
-        if (state.isOutsideSafeZone) {
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
-            ctx.fillRect(cameraX, cameraY, canvas.width, canvas.height);
+        // === SPACETIME ANOMALIES RENDERING ===
+        (state.anomalies || []).forEach((ano: any) => {
+            if (ano.x < cameraX - ano.r*3 || ano.x > cameraX + canvas.width + ano.r*3 || 
+                ano.y < cameraY - ano.r*3 || ano.y > cameraY + canvas.height + ano.r*3) return;
             
-            ctx.fillStyle = '#EF4444';
-            ctx.font = 'bold 36px "Inter", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText('WARNING: STRUCTURAL DAMAGE IMMINENT', cameraX + canvas.width / 2, cameraY + 100);
-            ctx.font = '24px "Inter", sans-serif';
-            ctx.fillText('RETURN TO SAFE ZONE', cameraX + canvas.width / 2, cameraY + 140);
-        }
+            if (ano.type === 'black_hole') {
+                ctx.save();
+                ctx.translate(ano.x, ano.y);
+                ctx.rotate(ano.rotation);
+                
+                // Accretion Disk (multiple layers)
+                const gradient = ctx.createRadialGradient(0, 0, ano.r * 0.8, 0, 0, ano.r * 2.5);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+                gradient.addColorStop(0.2, 'rgba(236, 72, 153, 0.6)'); // Pinkish
+                gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.3)'); // Purple
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, ano.r * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Swirl lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ano.r * (1.2 + i * 0.3), i * Math.PI / 2, i * Math.PI / 2 + Math.PI);
+                    ctx.stroke();
+                }
+
+                // Event Horizon
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(0, 0, ano.r, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Subtle glowing edge for the event horizon
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, ano.r, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Gravitational lensing effect (fake with a faint white/blue glowing ring slightly outside)
+                ctx.strokeStyle = 'rgba(147, 197, 253, 0.4)';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(0, 0, ano.r * 1.3, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            } else if (ano.type === 'memory_leak') {
+                 ctx.save();
+                 ctx.translate(ano.x, ano.y);
+                 
+                 // Glitchy binary rain / static clip area
+                 ctx.beginPath();
+                 ctx.arc(0, 0, ano.r, 0, Math.PI * 2);
+                 ctx.clip();
+                 
+                 ctx.fillStyle = 'rgba(17, 24, 39, 0.8)'; // dark background overlay
+                 ctx.fillRect(-ano.r, -ano.r, ano.r*2, ano.r*2);
+                 
+                 ctx.fillStyle = '#10b981'; // code green
+                 ctx.font = '12px Courier';
+                 for (let i=0; i<Math.min(100, Math.floor(ano.r/5)); i++) {
+                     const rx = (Math.random() - 0.5) * 2 * ano.r;
+                     const ry = (Math.random() - 0.5) * 2 * ano.r;
+                     ctx.globalAlpha = Math.random();
+                     ctx.fillText(Math.random() > 0.5 ? '0' : '1', rx, ry);
+                 }
+                 
+                 // Chunky static rectangles
+                 ctx.globalAlpha = 1.0;
+                 for(let i=0; i<Math.min(30, Math.floor(ano.r/10)); i++) {
+                     ctx.fillStyle = Math.random() > 0.5 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.1)';
+                     ctx.fillRect((Math.random() - 0.5) * 2 * ano.r, (Math.random() - 0.5) * 2 * ano.r, Math.random() * 80 + 10, Math.random() * 20 + 5);
+                 }
+
+                 // Inner core for sacrifice
+                 if (ano.state === 'growing') {
+                     ctx.beginPath();
+                     ctx.arc(0, 0, ano.sacrificeDist, 0, Math.PI * 2);
+                     ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                     ctx.setLineDash([5, 5]);
+                     ctx.lineWidth = 2;
+                     ctx.stroke();
+                     ctx.setLineDash([]);
+                 }
+
+                 ctx.restore();
+
+                 // Glitch Boundary edge
+                 ctx.save();
+                 ctx.translate(ano.x, ano.y);
+                 ctx.beginPath();
+                 ctx.arc(0, 0, ano.r, 0, Math.PI * 2);
+                 ctx.strokeStyle = Math.random() > 0.5 ? '#10b981' : '#ef4444';
+                 ctx.lineWidth = 4 + Math.random() * 4;
+                 ctx.stroke();
+                 ctx.restore();
+            }
+        });
+
+        // Game Boundary
+        const BOUNDARY_MARGIN = 150;
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(BOUNDARY_MARGIN, BOUNDARY_MARGIN, MAP_WIDTH - BOUNDARY_MARGIN * 2, MAP_HEIGHT - BOUNDARY_MARGIN * 2);
 
         // Enemies
         const currentWave = Math.floor(state.diffTimer / 30) + 1;
@@ -1730,6 +2400,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
         // Damage Numbers
         state.damageNumbers.forEach((d: any) => {
+           if (d.life <= 0) return;
            ctx.save();
            ctx.translate(d.x, d.y);
            // Fade out faster towards end of life
@@ -1741,10 +2412,10 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
            
            ctx.strokeStyle = '#000';
            ctx.lineWidth = 3;
-           ctx.strokeText(d.amount.toString(), 0, 0);
+           ctx.strokeText(Math.ceil(d.amount).toString(), 0, 0);
            
            ctx.fillStyle = '#facc15'; // yellow text
-           ctx.fillText(d.amount.toString(), 0, 0);
+           ctx.fillText(Math.ceil(d.amount).toString(), 0, 0);
            
            ctx.restore();
         });
@@ -1797,23 +2468,20 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.shadowBlur = 0; 
             
             // Draw drone laser pointer to target
-            if (drone.targetId !== null) {
-                const target = state.enemies.find((e: any) => e.id === drone.targetId);
-                if (target) {
-                    ctx.beginPath();
-                    ctx.moveTo(dx, dy);
-                    // inverse translate since we translated to `player.x, player.y`
-                    const tgtX = target.x - state.player.x;
-                    const tgtY = target.y - state.player.y;
-                    ctx.lineTo(tgtX, tgtY);
-                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([5, 5]);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                }
-            }
+            // (Removed laser pointer)
         });
+
+        // Drone Range Indicator
+        ctx.beginPath();
+        ctx.arc(state.player.x, state.player.y, droneRangeRef.current, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)'; // light cyan/blue
+        ctx.lineWidth = 1;
+        ctx.setLineDash([10, 20]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.03)';
+        ctx.fill();
 
         // Gun barrel / Player Sprite
         const dx = state.mouse.x - state.player.x;
@@ -1827,7 +2495,25 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.shadowBlur = 20;
             ctx.shadowColor = '#0ea5e9'; // Cyan glow
             
-            playerRenderer.draw(ctx, 0, 0);
+            if (state.isPlayerInLeak) {
+                ctx.globalAlpha = 0.5 + Math.random() * 0.3;
+                ctx.save();
+                ctx.translate(-5 + Math.random() * 10, -5 + Math.random() * 10);
+                if (ctx.filter !== undefined) ctx.filter = 'hue-rotate(90deg)';
+                playerRenderer.draw(ctx, 0, 0);
+                ctx.restore();
+
+                ctx.save();
+                ctx.translate(-5 + Math.random() * 10, -5 + Math.random() * 10);
+                if (ctx.filter !== undefined) ctx.filter = 'hue-rotate(-90deg)';
+                playerRenderer.draw(ctx, 0, 0);
+                ctx.restore();
+                
+                ctx.globalAlpha = 1.0;
+                playerRenderer.draw(ctx, 0, 0);
+            } else {
+                playerRenderer.draw(ctx, 0, 0);
+            }
             ctx.shadowBlur = 0;
             ctx.restore();
         } else {
@@ -1925,6 +2611,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
         // Bullets
         state.bullets.forEach((b: any) => {
+           if (b.life <= 0) return;
            ctx.save();
            const bulletImg = ASSETS_CACHE.projectiles?.['Bullet'];
            if (bulletImg && !b.isDrone) { // Render default bullet graphic for player gun
@@ -1934,13 +2621,24 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                ctx.shadowColor = '#f59e0b';
                ctx.drawImage(bulletImg, 0, 0, 16, 16, -16, -16, 32, 32);
            } else {
-               // Render cyan energy ball for drone lasers
+               // Render cyan energy laser trail for drones
                const color = b.isDrone ? '#00D9FF' : '#F59E0B';
-               ctx.shadowBlur = 10;
+               ctx.translate(b.x, b.y);
+               ctx.rotate(Math.atan2(b.vy, b.vx));
+               
+               // Outer glow trail
+               ctx.shadowBlur = 15;
                ctx.shadowColor = color;
                ctx.fillStyle = color;
                ctx.beginPath();
-               ctx.arc(b.x, b.y, b.isDrone ? 5 : 4, 0, Math.PI * 2);
+               ctx.roundRect(-20, -3, 30, 6, 3);
+               ctx.fill();
+               
+               // Inner white core
+               ctx.shadowBlur = 0;
+               ctx.fillStyle = '#FFFFFF';
+               ctx.beginPath();
+               ctx.roundRect(-15, -1, 20, 2, 1);
                ctx.fill();
            }
            ctx.restore();
@@ -1948,29 +2646,64 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
         // Enemy Bullets
         state.enemyBullets.forEach((b: any) => {
+           if (b.life <= 0) return;
            ctx.save();
-           const torpedoImg = ASSETS_CACHE.projectiles?.['Torpedo'];
-           if (torpedoImg) {
-               ctx.translate(b.x, b.y);
-               ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
-               ctx.shadowBlur = b.isBig ? 25 : 15;
-               ctx.shadowColor = b.isBig ? '#ec4899' : '#10b981';
-               const w = b.isBig ? 48 : 24;
-               const h = b.isBig ? 48 : 24;
-               ctx.drawImage(torpedoImg, 0, 0, 32, 32, -w/2, -h/2, w, h);
+           
+           ctx.translate(b.x, b.y);
+           ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+           
+           let w = 24, h = 24, blur = 10, color = '#34d399', shape = 'image', size = 4;
+           if (b.bulletType?.startsWith('boss')) {
+               shape = 'image';
+               if (b.bulletType === 'boss_slow') { w = 64; h = 64; blur = 30; color = '#dc2626'; }
+               else if (b.bulletType === 'boss_burst') { w = 32; h = 32; blur = 20; color = '#f59e0b'; }
+               else if (b.bulletType === 'boss_spiral') { w = 48; h = 48; blur = 25; color = '#ec4899'; }
+               else if (b.bulletType === 'boss_sweep') { w = 24; h = 24; blur = 15; color = '#8b5cf6'; }
+               else if (b.bulletType === 'boss_focused') { w = 56; h = 56; blur = 30; color = '#ef4444'; }
+               else if (b.bulletType === 'boss_snipe') { w = 40; h = 120; blur = 40; color = '#f87171'; } // long beam
+               else { w = 48; h = 48; blur = 25; color = '#ec4899'; }
+           } else if (b.bulletType?.startsWith('tank')) {
+               shape = 'image'; w = 40; h = 40; blur = 20; color = '#f97316';
+           } else if (b.bulletType?.startsWith('grunt')) {
+               shape = 'circle';
+               if (b.bulletType === 'grunt_snipe') { size = 5; blur = 15; color = '#fcd34d'; }
+               else if (b.bulletType === 'grunt_burst') { size = 3; blur = 8; color = '#6ee7b7'; }
+               else { size = 4; blur = 10; color = '#34d399'; }
+           } else if (b.bulletType === 'turret_standard') {
+               shape = 'circle'; size = 6; blur = 12; color = '#c084fc';
            } else {
-               ctx.shadowBlur = b.isBig ? 20 : 10;
-               ctx.shadowColor = b.isBig ? '#ec4899' : '#34d399';
-               ctx.fillStyle = b.isBig ? '#ec4899' : '#34d399';
+               // Fallback logic
+               shape = b.isBig ? 'image' : 'circle';
+               if (b.isBig) { w = 48; h = 48; blur = 25; color = '#ec4899'; }
+               else { size = 4; blur = 10; color = '#34d399'; }
+           }
+           
+           ctx.shadowBlur = blur;
+           ctx.shadowColor = color;
+           
+           if (shape === 'image') {
+               const torpedoImg = ASSETS_CACHE.projectiles?.['Torpedo'];
+               if (torpedoImg) {
+                   ctx.drawImage(torpedoImg, 0, 0, 32, 32, -w/2, -h/2, w, h);
+               } else {
+                   ctx.fillStyle = color;
+                   ctx.beginPath();
+                   ctx.arc(0, 0, w/4, 0, Math.PI * 2);
+                   ctx.fill();
+               }
+           } else {
+               ctx.fillStyle = color;
                ctx.beginPath();
-               ctx.arc(b.x, b.y, b.isBig ? 8 : 4, 0, Math.PI * 2);
+               ctx.arc(0, 0, size, 0, Math.PI * 2);
                ctx.fill();
            }
+           
            ctx.restore();
         });
 
         // Particles
         state.particles.forEach((p: any) => {
+           if (p.life <= 0) return;
            ctx.save();
            ctx.fillStyle = p.color;
            ctx.globalAlpha = Math.max(0, p.maxLife ? p.life / p.maxLife : Math.min(1, p.life / 0.5)); 
@@ -1978,18 +2711,30 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                ctx.translate(p.x, p.y);
                ctx.rotate(p.angle || 0);
                ctx.beginPath();
-               if (p.shape === 'rect') {
-                   ctx.rect(-p.radius/2, -p.radius/2, p.radius, p.radius);
+               if (p.shape === 'sprite_debris' && asteroidSpriteRef.current) {
+                   const img = asteroidSpriteRef.current;
+                   const cols = 8;
+                   const rows = 4;
+                   const sw = img.width / cols;
+                   const sh = img.height / rows;
+                   const sx = (p.spriteIdxX || 0) * sw;
+                   const sy = (p.spriteIdxY || 0) * sh;
+
+                   ctx.drawImage(img, sx, sy, sw, sh, -p.radius, -p.radius, p.radius*2, p.radius*2);
                } else {
-                   ctx.moveTo(0, -p.radius);
-                   ctx.lineTo(p.radius, p.radius);
-                   ctx.lineTo(-p.radius, p.radius);
-                   ctx.closePath();
+                   if (p.shape === 'rect') {
+                       ctx.rect(-p.radius/2, -p.radius/2, p.radius, p.radius);
+                   } else {
+                       ctx.moveTo(0, -p.radius);
+                       ctx.lineTo(p.radius, p.radius);
+                       ctx.lineTo(-p.radius, p.radius);
+                       ctx.closePath();
+                   }
+                   ctx.fill();
+                   // Extra inner detail for depth
+                   ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                   ctx.fill();
                }
-               ctx.fill();
-               // Extra inner detail for depth
-               ctx.fillStyle = 'rgba(0,0,0,0.3)';
-               ctx.fill();
            } else {
                ctx.beginPath();
                ctx.arc(p.x, p.y, p.radius || (Math.random() * 2 + 1), 0, Math.PI * 2);
@@ -2000,14 +2745,47 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         ctx.globalAlpha = 1;
 
         // Crosshair
-        ctx.beginPath();
-        ctx.moveTo(state.mouse.x - 8, state.mouse.y);
-        ctx.lineTo(state.mouse.x + 8, state.mouse.y);
-        ctx.moveTo(state.mouse.x, state.mouse.y - 8);
-        ctx.lineTo(state.mouse.x, state.mouse.y + 8);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if (!isTouchDevice) {
+            ctx.save();
+            ctx.translate(state.mouse.x, state.mouse.y);
+            
+            // Drop shadow to ensure it's visible against bright backgrounds (asteroids/explosions)
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+            ctx.shadowBlur = 4;
+            
+            // Outer rotating ring
+            const nowTime = performance.now() / 1000;
+            ctx.rotate(nowTime * 1.5);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.strokeStyle = state.mouse.down ? 'rgba(239, 68, 68, 0.8)' : 'rgba(56, 189, 248, 0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 8]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Inner precision cross
+            ctx.rotate(-nowTime * 1.5); // Counter rotation to keep center lines stable
+            ctx.beginPath();
+            // Horizontal line
+            ctx.moveTo(-8, 0); ctx.lineTo(-2, 0);
+            ctx.moveTo(2, 0); ctx.lineTo(8, 0);
+            // Vertical line
+            ctx.moveTo(0, -8); ctx.lineTo(0, -2);
+            ctx.moveTo(0, 2); ctx.lineTo(0, 8);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Center targeting reticle
+            ctx.beginPath();
+            ctx.arc(0, 0, state.mouse.down ? 2 : 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = state.mouse.down ? '#ef4444' : '#ffffff';
+            ctx.fill();
+            
+            ctx.restore();
+        }
         ctx.restore(); // restore camera bounds
 
         // Minimap
@@ -2027,10 +2805,8 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
               const smy = (150 / MAP_HEIGHT) * mCanvas.height;
               const smw = ((MAP_WIDTH - 300) / MAP_WIDTH) * mCanvas.width;
               const smh = ((MAP_HEIGHT - 300) / MAP_HEIGHT) * mCanvas.height;
-              mCtx.strokeStyle = state.isOutsideSafeZone ? '#EF4444' : 'rgba(239, 68, 68, 0.4)';
-              mCtx.setLineDash([5, 5]);
+              mCtx.strokeStyle = '#475569';
               mCtx.strokeRect(smx, smy, smw, smh);
-              mCtx.setLineDash([]);
               
               // Draw enemies
               state.enemies.forEach((e: any) => {
@@ -2094,8 +2870,8 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   return (
     <div ref={containerRef} className="relative w-full h-full bg-[#0A0F1F] overflow-hidden font-sans select-none border border-[#111827] rounded-xl shadow-[0_0_20px_rgba(0,217,255,0.05)]">
       {/* Top Left: HP / Stamina */}
-      <div className="absolute top-4 left-4 flex flex-col gap-3 pointer-events-none z-10 w-56">
-        <div className="bg-[#111827]/90 px-4 py-3 border-l-4 border-l-[#EF4444] border border-[#111827] shadow-[0_0_10px_rgba(239,68,68,0.15)]">
+      <div className="absolute top-2 left-2 md:top-4 md:left-4 flex flex-col gap-2 md:gap-3 pointer-events-none z-10 w-40 md:w-56 origin-top-left scale-[0.7] sm:scale-90 md:scale-100">
+        <div className="bg-[#111827]/90 px-3 md:px-4 py-2 md:py-3 border-l-4 border-l-[#EF4444] border border-[#111827] shadow-[0_0_10px_rgba(239,68,68,0.15)]">
            <div className="flex justify-between items-center mb-1.5">
              <span className="text-[10px] text-[#F8FAFC] font-bold tracking-widest uppercase">HP</span>
              <span className="text-[10px] font-mono font-bold text-[#EF4444]" ref={hpTextRef}>100%</span>
@@ -2134,8 +2910,8 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       </div>
 
       {/* Top Center: Wave / Score / Time */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10 w-48">
-        <div className="bg-[#111827]/90 border border-[#00D9FF]/30 px-6 py-2 rounded-t flex flex-col items-center shadow-[0_0_15px_rgba(0,217,255,0.1)] w-full">
+      <div className="absolute top-2 md:top-4 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10 w-32 md:w-48 origin-top scale-[0.75] sm:scale-95 md:scale-100">
+        <div className="bg-[#111827]/90 border border-[#00D9FF]/30 px-4 md:px-6 py-1.5 md:py-2 rounded-t flex flex-col items-center shadow-[0_0_15px_rgba(0,217,255,0.1)] w-full">
            <span className="text-[10px] text-[#00D9FF] font-bold tracking-widest uppercase mb-1">WAVE</span>
            <span ref={waveRef} className="text-xl font-bold text-[#F8FAFC] font-mono leading-none tracking-widest">01</span>
         </div>
@@ -2152,7 +2928,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       </div>
 
       {/* Top Right: Minimap & Stats */}
-      <div className="absolute top-4 right-4 flex gap-4 pointer-events-none z-10">
+      <div className="absolute top-2 md:top-4 right-2 md:right-4 flex gap-2 md:gap-4 pointer-events-none z-10 origin-top-right scale-[0.7] sm:scale-90 md:scale-100">
         <button 
           onClick={togglePause} 
           className="pointer-events-auto bg-[#111827]/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 px-3 py-1.5 rounded-lg shadow-lg text-[10px] font-bold tracking-widest flex items-center h-fit transition-colors"
@@ -2181,6 +2957,18 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
                     CORES: 2
                  </div>
               </div>
+
+              {/* Drone Range Configuration */}
+              <div className="bg-[#111827]/90 border border-[#38bdf8]/40 shadow-[0_0_10px_rgba(56,189,248,0.1)] flex flex-col w-full text-white pointer-events-auto">
+                 <div className="bg-[#38bdf8]/10 px-3 py-1 border-b border-[#38bdf8]/20 flex justify-between items-center gap-2">
+                    <span className="text-[9px] text-[#38bdf8] font-mono tracking-widest font-bold">DRONE RANGE</span>
+                 </div>
+                 <div className="px-3 py-1.5 flex justify-between items-center bg-[#111827]">
+                    <button onClick={() => setDroneRange(r => Math.max(300, r - 100))} className="text-[#38bdf8] hover:text-white bg-[#38bdf8]/10 hover:bg-[#38bdf8]/30 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors"> - </button>
+                    <span className="text-[#38bdf8] font-mono text-[10px] font-bold min-w-[30px] text-center">{droneRange}</span>
+                    <button onClick={() => setDroneRange(r => Math.min(2000, r + 100))} className="text-[#38bdf8] hover:text-white bg-[#38bdf8]/10 hover:bg-[#38bdf8]/30 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors"> + </button>
+                 </div>
+              </div>
            </div>
         </div>
       </div>
@@ -2207,7 +2995,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
       {/* Controls Info overlays */}
       {!isTouchDevice && (
-        <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500 font-bold flex flex-col gap-1 pointer-events-none z-10 hidden md:flex">
+        <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500 font-bold flex flex-col gap-1 pointer-events-none z-10 hidden lg:flex">
             <div>[W A S D] MOVE</div>
             <div>[SHIFT]   BOOST</div>
             <div>[MOUSE]   AIM & FIRE</div>
@@ -2216,7 +3004,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       )}
 
       {/* Bottom: Weapon Slots & Ammo */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-6 items-end pointer-events-none z-10">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 hidden md:flex gap-6 items-end pointer-events-none z-10">
         {/* Weapons */}
         <div className="flex gap-2">
           <div ref={wpn1Ref} className="w-12 h-12 bg-[#0A0F1F] border-2 border-[#00D9FF] shadow-[0_0_10px_rgba(0,217,255,0.2)] relative flex items-center justify-center font-mono text-[#00D9FF] text-[10px] font-bold">
@@ -2250,62 +3038,108 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       
       {/* Mobile Controls Overlay */}
       {isTouchDevice && (
-        <div className="absolute inset-x-0 bottom-8 z-20 pointer-events-none flex justify-between px-8 md:hidden">
-            <div className="pointer-events-auto opacity-70">
-                <VirtualJoystick 
-                    onMove={(x, y, active) => {
-                        mobileMoveRef.current = { x, y, active };
-                    }} 
-                    size={130} 
-                    color="rgba(239, 68, 68, 0.3)" 
-                />
+        <>
+            {/* Left Joystick (Move) */}
+            <div 
+              className="absolute z-20 pointer-events-none"
+              style={{
+                 left: `${hudLayout.moveJoystick.x}%`,
+                 top: `${hudLayout.moveJoystick.y}%`,
+                 transform: `translate(-50%, -50%) scale(${hudLayout.moveJoystick.scale})`,
+                 opacity: hudLayout.moveJoystick.opacity,
+              }}
+            >
+                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto shadow-[0_0_20px_rgba(239,68,68,0.2)] rounded-full">
+                    <VirtualJoystick 
+                        onMove={(x, y, active) => { mobileMoveRef.current = { x, y, active }; }} 
+                        size={120} color="rgba(239, 68, 68, 0.3)" 
+                    />
+                </div>
             </div>
             
-            <div className="flex gap-4 items-end">
-                 <div className="flex flex-col gap-4 pointer-events-auto opacity-80">
-                     <button
-                         id="mobile-wpn-btn"
-                         onClick={() => {
-                             const e = new KeyboardEvent('keydown', { key: 'q' });
-                             window.dispatchEvent(e);
-                         }}
-                         className="w-12 h-12 rounded-full bg-[#111827] border-2 border-amber-500 font-bold text-[10px] text-white shadow-lg active:bg-slate-700 mx-auto"
-                     >
-                         WPN
-                     </button>
-                     <button
-                         id="mobile-shd-btn"
-                         onClick={() => {
-                             const e = new KeyboardEvent('keydown', { key: 'e' });
-                             window.dispatchEvent(e);
-                         }}
-                         className="w-12 h-12 rounded-full bg-[#111827] border-2 border-[#8B5CF6] font-bold text-[10px] text-white shadow-lg active:bg-slate-700 mx-auto"
-                     >
-                         SHD
-                     </button>
-                     <button
-                         id="mobile-boost-btn"
-                         data-active="false"
-                         onPointerDown={(e) => { e.currentTarget.dataset.active = "true"; }}
-                         onPointerUp={(e) => { e.currentTarget.dataset.active = "false"; }}
-                         onPointerCancel={(e) => { e.currentTarget.dataset.active = "false"; }}
-                         className="w-14 h-14 rounded-full bg-[#111827] border-2 border-slate-500 font-bold text-xs text-white shadow-lg active:bg-slate-700 active:scale-95 mx-auto"
-                     >
-                         DASH
-                     </button>
-                 </div>
-                 
-                 <div className="pointer-events-auto opacity-70 mb-4">
-                     <VirtualJoystick 
-                        onMove={(x, y, active) => {
-                            mobileAimRef.current = { x, y, active };
-                        }} 
-                        size={130} 
-                        color="rgba(0, 217, 255, 0.3)" 
-                     />
-                 </div>
+            {/* Right Joystick & Abilities (Aim + Skills ML Style) */}
+            <div 
+              className="absolute z-20 pointer-events-none"
+              style={{
+                 left: `${hudLayout.wpnBtn.x}%`,
+                 top: `${hudLayout.wpnBtn.y}%`,
+                 transform: `translate(-50%, -50%) scale(${hudLayout.wpnBtn.scale})`,
+                 opacity: hudLayout.wpnBtn.opacity,
+              }}
+            >
+                <button
+                    id="mobile-wpn-btn"
+                    onClick={() => {
+                        const e = new KeyboardEvent('keydown', { key: 'x' });
+                        window.dispatchEvent(e);
+                    }}
+                    className="w-14 h-14 rounded-full bg-slate-900/90 border border-amber-500/50 font-bold text-xs text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)] active:bg-amber-500/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
+                >
+                    WPN
+                </button>
             </div>
-        </div>
+
+            <div 
+              className="absolute z-20 pointer-events-none"
+              style={{
+                 left: `${hudLayout.shdBtn.x}%`,
+                 top: `${hudLayout.shdBtn.y}%`,
+                 transform: `translate(-50%, -50%) scale(${hudLayout.shdBtn.scale})`,
+                 opacity: hudLayout.shdBtn.opacity,
+              }}
+            >
+                <button
+                    id="mobile-shd-btn"
+                    onClick={() => {
+                        const e = new KeyboardEvent('keydown', { key: 'e' });
+                        window.dispatchEvent(e);
+                    }}
+                    className="w-16 h-16 rounded-full bg-slate-900/90 border border-[#8B5CF6]/50 font-bold text-xs text-[#8B5CF6] shadow-[0_0_15px_rgba(139,92,246,0.4)] active:bg-[#8B5CF6]/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
+                >
+                    SHD
+                </button>
+            </div>
+
+            <div 
+              className="absolute z-20 pointer-events-none"
+              style={{
+                 left: `${hudLayout.dshBtn.x}%`,
+                 top: `${hudLayout.dshBtn.y}%`,
+                 transform: `translate(-50%, -50%) scale(${hudLayout.dshBtn.scale})`,
+                 opacity: hudLayout.dshBtn.opacity,
+              }}
+            >
+                <button
+                    id="mobile-boost-btn"
+                    data-active="false"
+                    onPointerDown={(e) => { e.currentTarget.dataset.active = "true"; }}
+                    onPointerUp={(e) => { e.currentTarget.dataset.active = "false"; }}
+                    onPointerCancel={(e) => { e.currentTarget.dataset.active = "false"; }}
+                    className="w-16 h-16 rounded-full bg-slate-900/90 border border-slate-400/50 font-bold text-xs text-white shadow-[0_0_15px_rgba(255,255,255,0.2)] active:bg-slate-400/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
+                >
+                    DASH
+                </button>
+            </div>
+                
+            <div 
+              className="absolute z-20 pointer-events-none"
+              style={{
+                 left: `${hudLayout.aimJoystick.x}%`,
+                 top: `${hudLayout.aimJoystick.y}%`,
+                 transform: `translate(-50%, -50%) scale(${hudLayout.aimJoystick.scale})`,
+                 opacity: hudLayout.aimJoystick.opacity,
+              }}
+            >
+                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto opacity-80 shadow-[0_0_20px_rgba(0,217,255,0.2)] rounded-full relative">
+                    <div className="absolute inset-0 rounded-full border border-sky-400/30 pointer-events-none" style={{ padding: '4px', background: 'radial-gradient(circle, rgba(0,217,255,0.15) 0%, rgba(0,0,0,0) 70%)'}}></div>
+                    
+                    <VirtualJoystick 
+                        onMove={(x, y, active) => { mobileAimRef.current = { x, y, active }; }} 
+                        size={120} color="rgba(0, 217, 255, 0.4)" 
+                    />
+                </div>
+            </div>
+          </>
       )}
 
       <canvas ref={canvasRef} className="block w-full h-full z-0 cursor-none relative touch-none" />
@@ -2315,13 +3149,21 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">PAUSED</h2>
           <p className="text-slate-400 mb-8 max-w-md text-center">System operation suspended.</p>
 
-          <div className="flex gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <button 
               onClick={togglePause}
               className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-indigo-500/20 active:scale-95"
             >
               Resume Operation
             </button>
+            {isTouchDevice && (
+                <button 
+                  onClick={() => setIsHudEditorOpen(true)}
+                  className="flex items-center justify-center gap-2 bg-[#f59e0b] hover:bg-[#fbbf24] text-slate-950 px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-[#f59e0b]/20 active:scale-95"
+                >
+                  Edit HUD
+                </button>
+            )}
             <button 
               onClick={onReturnMenu}
               className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-slate-500/20 active:scale-95"
@@ -2330,6 +3172,16 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             </button>
           </div>
         </div>
+      )}
+
+      {/* HUD EDITOR MOUNT OVERLAY */}
+      {isHudEditorOpen && (
+          <div className="absolute inset-0 z-[100]">
+             <HudEditor onExit={() => {
+                 setIsHudEditorOpen(false);
+                 setHudLayout(getSavedLayout());
+             }} />
+          </div>
       )}
     </div>
   );

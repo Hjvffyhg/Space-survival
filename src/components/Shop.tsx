@@ -51,7 +51,7 @@ export function ShopScreen({ onBack }: { onBack: () => void }) {
       saveState(credits - ship.cost, newU, ship.id, upgrades);
       soundManager.playPowerup();
     } else {
-      soundManager.playError?.() || soundManager.playPlayerHit();
+      (soundManager as any).playError?.() || soundManager.playTakeDamage();
     }
   };
 
@@ -64,35 +64,35 @@ export function ShopScreen({ onBack }: { onBack: () => void }) {
       saveState(credits - cost, unlocked, selected, newUp);
       soundManager.playCollect('weapon');
     } else {
-      soundManager.playError?.() || soundManager.playPlayerHit();
+      (soundManager as any).playError?.() || soundManager.playTakeDamage();
     }
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-8 pt-20 max-w-6xl mx-auto text-slate-200">
+    <div className="w-full h-full flex flex-col p-4 pt-20 md:p-8 md:pt-20 max-w-6xl mx-auto text-slate-200">
       <button 
         onClick={onBack}
-        className="absolute top-6 left-6 flex items-center gap-2 p-3 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shadow-lg"
+        className="absolute top-4 left-4 md:top-6 md:left-6 flex items-center gap-2 p-2 px-3 md:p-3 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shadow-lg text-sm md:text-base z-10"
       >
         <ArrowLeft size={18} /> Exit Hangar
       </button>
 
-      <div className="flex justify-between items-end mb-8 border-b border-indigo-900/50 pb-4">
-        <div>
-          <h1 className="text-4xl font-bold text-white tracking-tight uppercase">Fleet Hangar</h1>
-          <p className="text-slate-400">Upgrade your vessel and unlock advanced ships.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4 md:mb-8 border-b border-indigo-900/50 pb-4 shrink-0">
+        <div className="mt-4 md:mt-0">
+          <h1 className="text-2xl md:text-4xl font-bold text-white tracking-tight uppercase">Fleet Hangar</h1>
+          <p className="text-xs md:text-base text-slate-400">Upgrade your vessel and unlock advanced ships.</p>
         </div>
-        <div className="text-right bg-slate-900 px-6 py-3 rounded-xl border border-indigo-500/30">
-          <div className="text-sm text-indigo-400 font-bold tracking-widest uppercase mb-1">Available Credits</div>
-          <div className="text-3xl font-mono text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{credits.toLocaleString()} CTR</div>
+        <div className="text-left md:text-right bg-slate-900 px-4 md:px-6 py-2 md:py-3 rounded-xl border border-indigo-500/30 w-full md:w-auto flex flex-row md:flex-col justify-between md:justify-start items-center md:items-end">
+          <div className="text-xs md:text-sm text-indigo-400 font-bold tracking-widest uppercase md:mb-1">Credits</div>
+          <div className="text-xl md:text-3xl font-mono text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{credits.toLocaleString()} CTR</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
         
         {/* SHIPS PANEL */}
-        <div className="flex flex-col gap-4 overflow-y-auto pr-4 custom-scrollbar">
-          <h2 className="text-2xl font-bold text-indigo-300">Vessels</h2>
+        <div className="flex flex-col gap-4 lg:overflow-y-auto pr-2 custom-scrollbar">
+          <h2 className="text-xl md:text-2xl font-bold text-indigo-300 shrink-0">Vessels</h2>
           {SHIPS.map(ship => {
             const isUnlocked = unlocked.includes(ship.id);
             const isSelected = selected === ship.id;
@@ -141,8 +141,8 @@ export function ShopScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* UPGRADES PANEL */}
-        <div className="flex flex-col gap-4 overflow-y-auto pr-4 custom-scrollbar">
-          <h2 className="text-2xl font-bold text-rose-300">System Upgrades</h2>
+        <div className="flex flex-col gap-4 lg:overflow-y-auto pr-2 custom-scrollbar">
+          <h2 className="text-xl md:text-2xl font-bold text-rose-300 mt-4 md:mt-0 shrink-0">System Upgrades</h2>
           {UPGRADES.map(upg => {
             const currentLvl = upgrades[upg.id] || 0;
             const isMax = currentLvl >= upg.maxLevel;

@@ -1,0 +1,35 @@
+214:      respawnQueue: [] as any[],
+433:      let spawnInterval = Math.max(0.1, 2.0 - (state.diffTimer / 60) - (civilizationLevel * 0.2)); // harder over time
+436:      if (now - state.lastSpawnTime > spawnInterval) {
+454:        if (state.diffTimer > 45 && Math.random() < 0.03 && state.bossWarningTimer <= 0) { // Boss spawn chance
+520:          spawnScale: 0.1,
+543:      if (!state.respawnQueue) state.respawnQueue = [];
+544:      state.respawnQueue = state.respawnQueue.filter((rq: any) => {
+559:              const spawnAngle = Math.random() * Math.PI * 2;
+560:              const spawnDist = 900 + Math.random() * 300; 
+561:              const spawnX = Math.max(0, Math.min(MAP_WIDTH, state.player.x + Math.cos(spawnAngle) * spawnDist));
+562:              const spawnY = Math.max(0, Math.min(MAP_HEIGHT, state.player.y + Math.sin(spawnAngle) * spawnDist));
+567:                   x: spawnX, y: spawnY,
+571:                   spawnScale: 0.1,
+574:                   respawnCount: rq.respawnCount,
+575:                   isRespawned: true
+579:              return false; // remove from respawnQueue
+599:      // Periodically spawn items
+1087:         if (e.spawnScale < 1) e.spawnScale += dt * 3;
+1088:         if (e.spawnScale > 1) e.spawnScale = 1;
+1117:                         const spawnAngle = Math.PI * 2 * Math.random();
+1121:                           x: e.x + Math.cos(spawnAngle) * (e.radius + 40),
+1122:                           y: e.y + Math.sin(spawnAngle) * (e.radius + 40),
+1161:                         const spawnAngle = (Math.PI * 2 / 4) * i;
+1164:                           x: e.x + Math.cos(spawnAngle) * (e.radius + 40), y: e.y + Math.sin(spawnAngle) * (e.radius + 40),
+1636:                   if (!state.respawnQueue) state.respawnQueue = [];
+1637:                   if (e.respawnCount === undefined) e.respawnCount = 0;
+1638:                   if (e.respawnCount < 2) { // 2 respawns per original unit to prevent endless growth causing lag
+1639:                       state.respawnQueue.push({
+1641:                           maxHp: e.maxHp * 1.1, // slightly stronger on respawn
+1645:                           respawnCount: e.respawnCount + 1
+2124:            ctx.scale(e.spawnScale, e.spawnScale);
+2158:            if (e.spawnScale < 1) {
+2160:                ctx.arc(0, 0, e.radius * (1 / e.spawnScale) * 1.5, 0, Math.PI * 2);
+2240:            if (!isDroneTarget && cfg.algo === 'HRRN' && e.spawnScale >= 1) {
+2247:            } else if (!isDroneTarget && cfg.algo === 'FCFS' && e.spawnScale >= 1) {

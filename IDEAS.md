@@ -6,7 +6,7 @@ The project is a **top-down 2D space shooter** game where the player takes on th
 
 **Inspiration**
 
-The game is inspired by classic and modern space shooters for its engaging bullet-hell combat and wave-based progression. It also draws mechanical and progression inspiration from snake games like *Worm Zone* and classic *Snake*, where players must continuously move, survive, and grow in power in chaotic environments. Additionally, it integrates unique ideas from computer science operating system task schedulers (FCFS, RR, and HRRN), mapping abstract logic directly onto battlefield targeting.
+The game is inspired by classic and modern space shooters for its engaging bullet-hell combat and wave-based progression. It also draws mechanical and progression inspiration from snake games like *Worm Zone* and classic *Snake*, where players must continuously move, survive, and grow in power in chaotic environments. Additionally, it integrates unique ideas from computer science operating system task schedulers (F CFS, RR, and HRRN), mapping abstract logic directly onto battlefield targeting.
 
 **Color Palette**
 

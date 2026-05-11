@@ -22,11 +22,11 @@ export function Report() {
   const [activeTab, setActiveTab] = useState('summary');
 
   return (
-    <div className="flex h-full w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+    <div className="flex flex-col md:flex-row h-full w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
       {/* Sidebar Content Menu */}
-      <div className="w-64 bg-slate-950/50 border-r border-slate-800 flex flex-col p-4 shrink-0 overflow-y-auto">
-         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 px-2">Table of Contents</h2>
-         <nav className="flex flex-col gap-1">
+      <div className="w-full md:w-64 bg-slate-950/50 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col p-2 md:p-4 shrink-0 overflow-x-auto md:overflow-y-auto custom-scrollbar">
+         <h2 className="hidden md:block text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 px-2">Table of Contents</h2>
+         <nav className="flex flex-row md:flex-col gap-2 md:gap-1 w-max md:w-auto">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -35,13 +35,13 @@ export function Report() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative text-left",
+                    "flex items-center gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all duration-200 relative text-left whitespace-nowrap",
                     isActive 
                       ? "text-white bg-slate-800 shadow-sm"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
                   )}
                 >
-                  <Icon size={16} className={cn("transition-colors", isActive ? "text-indigo-400" : "text-slate-500")} />
+                  <Icon size={16} className={cn("transition-colors shrink-0", isActive ? "text-indigo-400" : "text-slate-500")} />
                   <span className="flex-1 truncate">{tab.label}</span>
                 </button>
               );
@@ -50,7 +50,7 @@ export function Report() {
       </div>
 
       {/* Main Report Content */}
-      <div className="flex-1 overflow-y-auto p-8 md:p-12 scroll-smooth">
+      <div className="flex-1 overflow-y-auto p-4 md:p-12 scroll-smooth">
          <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

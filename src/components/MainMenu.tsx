@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/utils';
+import { MenuBackground } from './MenuBackground';
 
 const MenuButton = ({ 
   className, 
@@ -23,7 +24,7 @@ const MenuButton = ({
       onClick={!locked ? onClick : undefined}
       className={cn(
         "relative group transition-all duration-200",
-        "w-[180px] h-[45px] md:w-[200px] md:h-[50px]", // Compress size
+        "w-[160px] h-[40px] sm:w-[240px] sm:h-[60px] md:w-[300px] md:h-[75px]", // Auto-responsive sizing based on screen
         locked ? "cursor-not-allowed opacity-50 grayscale" : "cursor-pointer hover:scale-105 active:scale-95 hover:brightness-110 drop-shadow-xl",
         className
       )}
@@ -52,13 +53,8 @@ export function MainMenu({ onStartGame, onShowReport, onShowModes, onShowShop }:
   return (
     <div className="absolute inset-0 w-full h-full bg-slate-950 overflow-hidden">
       <div className="relative w-full h-full">
-        {/* Background Layer */}
-        <img 
-          src="/assets/Mainmenu.png" 
-          alt="Survival Menu" 
-          className="absolute inset-0 w-full h-full object-cover block"
-          style={{ imageRendering: 'pixelated' }}
-        />
+        {/* Procedural Animated Background */}
+        <MenuBackground />
         
         {/* Buttons UI Overlay */}
         <div className="absolute bottom-[10%] left-[5%] md:left-[8%] flex flex-col justify-end gap-3 md:gap-4 z-10 drop-shadow-2xl">

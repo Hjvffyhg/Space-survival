@@ -28,26 +28,26 @@ export function GalaxyModeSelect({ onBack, onSelectMode }: GalaxyModeSelectProps
   }, []);
 
   return (
-    <div className="absolute inset-0 bg-slate-950 flex flex-col p-8 text-white h-full overflow-y-auto">
+    <div className="absolute inset-0 bg-slate-950 flex flex-col p-4 pt-12 md:p-8 text-white h-full overflow-y-auto">
       {/* Background stars effect */}
       <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, #1e293b 0%, #020617 100%)' }} />
       
       <button 
         onClick={onBack}
-        className="relative z-10 flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-8 w-max"
+        className="relative z-10 flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-4 md:mb-8 w-max text-sm md:text-base border border-slate-800 md:border-transparent bg-slate-900 md:bg-transparent px-3 py-2 md:px-0 md:py-0 rounded-lg md:rounded-none"
       >
         <ArrowLeft size={20} /> Back to Menu
       </button>
 
-      <div className="relative z-10 text-center mb-12">
-        <h1 className="text-4xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 uppercase">
+      <div className="relative z-10 text-center mb-8 md:mb-12">
+        <h1 className="text-2xl md:text-4xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 uppercase">
           Galaxy Modes
         </h1>
-        <p className="text-slate-400 mt-2 font-mono">Current High Score: <span className="text-indigo-400">{highScore}</span></p>
-        <p className="text-slate-500 text-sm mt-1">Unlock new Kardashev Scale civilization modes by reaching score requirements.</p>
+        <p className="text-sm md:text-base text-slate-400 mt-2 font-mono">Current High Score: <span className="text-indigo-400">{highScore}</span></p>
+        <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-sm md:max-w-none mx-auto">Unlock new Kardashev Scale civilization modes by reaching score requirements.</p>
       </div>
 
-      <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto w-full pb-10">
+      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-7xl mx-auto w-full pb-10">
         {MODES.map((mode, idx) => {
           const unlocked = highScore >= mode.req;
           return (
