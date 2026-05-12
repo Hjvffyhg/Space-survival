@@ -30,6 +30,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scoreRef = useRef<HTMLSpanElement>(null);
+  const critVignetteRef = useRef<HTMLDivElement>(null);
   const hpRef = useRef<HTMLDivElement>(null);
   const hpTextRef = useRef<HTMLSpanElement>(null);
   const waveRef = useRef<HTMLSpanElement>(null);
@@ -66,6 +67,25 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   }, [droneRange]);
 
   const isDeadRef = useRef(false);
+
+  const [uiScale, setUiScale] = useState(1);
+  const uiScaleRef = useRef(1);
+  useEffect(() => {
+    const handleResize = () => {
+      // Base reference width for generic desktop
+      const baseWidth = 1440;
+      const baseHeight = 900;
+      // Calculate responsive scale factor
+      const widthScale = window.innerWidth / baseWidth;
+      const heightScale = window.innerHeight / baseHeight;
+      const scale = Math.max(0.6, Math.min(widthScale, heightScale, 1.2)); // Cap bounds so it doesn't get unplayably tiny or hilariously massive
+      setUiScale(scale);
+      uiScaleRef.current = scale;
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const mobileMoveRef = useRef({ x: 0, y: 0, active: false });
@@ -425,17 +445,17 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
          state.notification.time -= dt;
          if (notificationRef.current) {
             notificationRef.current.innerHTML = `
-              <div class="text-3xl font-bold text-white mb-1 tracking-widest drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">WAVE ${state.lastWave}</div>
-              <div class="text-sm font-bold text-[#00D9FF] uppercase tracking-widest mb-1 drop-shadow-[0_0_5px_rgba(0,217,255,0.8)]">SYSTEM UPDATE:</div>
-              <div class="text-xl font-mono text-[#F59E0B] leading-tight drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">${state.notification.text1}</div>
-              <div class="text-sm font-mono text-slate-300 mt-2">${state.notification.text2}</div>
+              <div class="flex flex-col items-center justify-center w-full">
+                <div class="text-4xl md:text-5xl font-black text-white mb-2 tracking-[0.3em] drop-shadow-[0_0_15px_rgba(255,255,255,0.9)]">WAVE ${state.lastWave}</div>
+                <div class="text-base md:text-lg font-bold text-[#00D9FF] uppercase tracking-widest mb-1 drop-shadow-[0_0_8px_rgba(0,217,255,0.9)]">SYSTEM UPDATE:</div>
+                <div class="text-2xl md:text-3xl font-mono font-bold text-[#F59E0B] leading-tight drop-shadow-[0_0_10px_rgba(245,158,11,0.9)] text-center">${state.notification.text1}</div>
+                <div class="text-sm md:text-base font-mono text-slate-300 mt-2 tracking-widest text-center uppercase">${state.notification.text2}</div>
+              </div>
             `;
             const opacity = state.notification.time > 1 ? 1 : Math.max(0, state.notification.time).toString();
-             // Add a subtle scale pop when appearing
-            const scale = 1 + (Math.max(0, 4.0 - state.notification.time) * 0.05);
-            const yOffset = -50 + (Math.max(0, 4.0 - state.notification.time) * -2);
+            const notifScale = 1 + (Math.max(0, 4.0 - state.notification.time) * 0.05);
             notificationRef.current.style.opacity = opacity.toString();
-            notificationRef.current.style.transform = `translate(-50%, ${yOffset}%) scale(${scale})`;
+            notificationRef.current.style.transform = `translateY(-50%) scale(${notifScale * uiScaleRef.current})`;
          }
       } else {
          if (notificationRef.current) {
@@ -1844,6 +1864,17 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
       const hpPercent = Math.max(0, Math.floor((state.player.hp / state.player.maxHp) * 100));
       if (hpTextRef.current) hpTextRef.current.innerText = state.isPlayerInLeak ? generateGarbage(3) : `${Math.max(0, Math.floor(state.player.hp))}`;
       if (hpRef.current) hpRef.current.style.width = `${hpPercent}%`;
+      
+      // Update Critical Low Health Vignette Overlay
+      if (critVignetteRef.current) {
+         if (hpPercent <= 25 && state.player.hp > 0 && !state.isGameOver && !state.isPlayerInLeak) {
+             const pulse = Math.abs(Math.sin((state.elapsed || 0) * 5)); // 5 rad/s pulse
+             critVignetteRef.current.style.opacity = (pulse * 0.7 + 0.3).toString();
+         } else {
+             critVignetteRef.current.style.opacity = '0';
+         }
+      }
+      
       const shieldPercent = Math.max(0, Math.floor(state.player.shield));
       if (shieldTextRef.current) shieldTextRef.current.innerText = state.isPlayerInLeak ? generateGarbage(3) : `${shieldPercent}%`;
       if (shieldRef.current) shieldRef.current.style.width = `${shieldPercent}%`;
@@ -1862,28 +1893,43 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           powerupRef.current.innerHTML = buffsHtml ? `<div class="flex flex-col gap-1.5 mt-2">${buffsHtml}</div>` : '';
       }
 
-      if (ammoRef.current) ammoRef.current.innerText = `${state.player.ammo}`;
+      if (ammoRef.current) ammoRef.current.innerText = `${Math.floor(state.player.ammo)}`;
 
       if (wpn1Ref.current && wpn2Ref.current) {
           const is1 = state.player.selectedWeapon === 1;
-          wpn1Ref.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] font-bold ${is1 ? 'bg-[#0A0F1F] border-2 border-[#00D9FF] shadow-[0_0_10px_rgba(0,217,255,0.2)] text-[#00D9FF]' : 'bg-[#111827] border border-[#111827] opacity-60 text-slate-500'}`;
-          wpn2Ref.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] font-bold ${!is1 ? 'bg-[#0A0F1F] border-2 border-[#00D9FF] shadow-[0_0_10px_rgba(0,217,255,0.2)] text-[#00D9FF]' : 'bg-[#111827] border border-[#111827] opacity-60 text-slate-500'}`;
+          const clipPoly = 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)';
+          
+          wpn1Ref.current.style.clipPath = clipPoly;
+          wpn1Ref.current.className = `w-14 h-14 md:w-16 md:h-16 shrink-0 relative flex items-center justify-center font-mono text-sm md:text-base font-bold backdrop-blur-md transition-all ${is1 ? 'bg-rose-950/80 border-2 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] text-rose-400' : 'bg-slate-900/60 border border-slate-700 text-slate-500'}`;
+          wpn1Ref.current.innerHTML = `<span class="z-10 text-[10px] md:text-[13px] font-black tracking-widest px-1.5 py-0.5 border-t border-b border-rose-500/50 bg-rose-950/80 drop-shadow-lg text-rose-100 uppercase">KIN</span><div class="absolute bottom-1 md:bottom-2 right-2 text-slate-400 text-[8px] z-10 font-bold drop-shadow-md">1</div>`;
+          
+          wpn2Ref.current.style.clipPath = clipPoly;
+          wpn2Ref.current.className = `w-14 h-14 md:w-16 md:h-16 shrink-0 relative flex items-center justify-center font-mono text-sm md:text-base font-bold backdrop-blur-md transition-all ${!is1 ? 'bg-rose-950/80 border-2 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] text-rose-400' : 'bg-slate-900/60 border border-slate-700 text-slate-500'}`;
+          wpn2Ref.current.innerHTML = `<span class="z-10 text-[10px] md:text-[13px] font-black tracking-widest px-1.5 py-0.5 border-t border-b border-slate-500/50 bg-slate-950/80 drop-shadow-lg text-slate-100 uppercase">PLS</span><div class="absolute bottom-1 md:bottom-2 right-2 text-slate-400 text-[8px] z-10 font-bold drop-shadow-md">2</div>`;
       }
 
       if (dshRef.current) {
           const cd = state.player.dashCooldown;
           const isReady = cd <= 0 && state.player.stamina >= 15;
           const bgHeight = cd > 0 ? (cd / 3.0) * 100 : 0; 
-          dshRef.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border-2 border-[#8B5CF6] text-[#8B5CF6] shadow-[0_0_10px_rgba(139,92,246,0.4)]' : 'bg-[#111827] border border-slate-700 text-slate-500'}`;
-          let content = 'DSH';
-          if (cd > 0) content = `<span class="z-10 text-white font-bold">${cd.toFixed(1)}s</span>`;
-          else if (!isReady) content = `<span class="z-10 text-[8px] text-red-500 leading-tight text-center">NO<br/>STM</span>`;
+          dshRef.current.style.clipPath = 'polygon(20% 0%, 100% 0%, 80% 100%, 0% 100%)';
+          let stateClass = 'bg-slate-900/80 border border-slate-700 text-slate-500';
+          if (isReady) stateClass = 'bg-slate-800/80 border border-slate-300 text-slate-200 shadow-[0_0_10px_rgba(255,255,255,0.2)]';
+          else if (cd <= 0) stateClass = 'bg-red-950/40 border border-red-900 text-red-500 grayscale transition-colors duration-500 animate-pulse';
+          
+          dshRef.current.className = `w-14 h-12 md:w-16 md:h-14 shrink-0 relative flex flex-col items-center justify-center font-mono backdrop-blur-md transition-all duration-300 ${stateClass}`;
+          
+          let cdOverlay = '';
+          if (cd > 0) cdOverlay = `<span class="z-20 absolute inset-0 flex items-center justify-center bg-slate-950/50 text-white font-bold text-sm backdrop-blur-sm">${cd.toFixed(1)}s</span>`;
+          else if (!isReady) cdOverlay = `<span class="z-20 absolute inset-0 flex items-center justify-center bg-red-950/70 text-[8px] md:text-[10px] text-red-400 leading-tight text-center font-bold">NO<br/>STM</span>`;
+
           dshRef.current.innerHTML = `
              <div class="absolute inset-0 overflow-hidden outline-none pointer-events-none">
-                <div class="absolute bottom-0 left-0 right-0 bg-black/70" style="height: ${bgHeight}%"></div>
+                <div class="absolute bottom-0 left-0 right-0 bg-amber-500/20" style="height: ${bgHeight}%"></div>
              </div>
-             <span class="z-10">${content}</span>
-             <div class="absolute -bottom-2 -right-2 bg-[#8B5CF6] text-white text-[8px] flex items-center justify-center z-10 w-4 h-4 shadow border border-[#111827] font-bold">Q</div>
+             <span class="z-10 text-[10px] md:text-[13px] font-black tracking-widest px-1.5 py-0.5 border-t border-b border-orange-500/50 bg-orange-950/80 drop-shadow-lg text-orange-100 uppercase">DASH</span>
+             ${cdOverlay}
+             <div class="absolute bottom-0 right-2 text-slate-400 text-[8px] z-10 font-bold drop-shadow-md">Q</div>
           `;
       }
 
@@ -1891,16 +1937,24 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
           const cd = state.player.shieldCooldown;
           const isReady = cd <= 0 && state.player.stamina >= 20;
           const bgHeight = cd > 0 ? (cd / 5.0) * 100 : 0;
-          shdSkillRef.current.className = `w-12 h-12 relative flex items-center justify-center font-mono text-[10px] transition-all duration-300 ${isReady ? 'bg-[#111827] border-2 border-[#3b82f6] text-[#3b82f6] shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-[#111827] border border-slate-700 text-slate-500'}`;
-          let content = 'SHD';
-          if (cd > 0) content = `<span class="z-10 text-white font-bold">${cd.toFixed(1)}s</span>`;
-          else if (!isReady) content = `<span class="z-10 text-[8px] text-red-500 leading-tight text-center">NO<br/>STM</span>`;
+          shdSkillRef.current.style.clipPath = 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)';
+          let stateClass = 'bg-slate-900/80 border border-slate-700 text-slate-500';
+          if (isReady) stateClass = 'bg-blue-950/80 border-2 border-blue-400 text-blue-300 shadow-[0_0_15px_rgba(96,165,250,0.4)]';
+          else if (cd <= 0) stateClass = 'bg-red-950/40 border border-red-900 text-red-500 grayscale transition-colors duration-500 animate-pulse';
+          
+          shdSkillRef.current.className = `w-14 h-14 md:w-16 md:h-16 shrink-0 relative flex flex-col items-center justify-center font-mono backdrop-blur-md transition-all duration-300 ${stateClass}`;
+          
+          let cdOverlay = '';
+          if (cd > 0) cdOverlay = `<span class="z-20 absolute inset-0 flex items-center justify-center bg-slate-950/50 text-white font-bold text-sm md:text-base backdrop-blur-sm">${cd.toFixed(1)}s</span>`;
+          else if (!isReady) cdOverlay = `<span class="z-20 absolute inset-0 flex items-center justify-center bg-red-950/70 text-[8px] md:text-[10px] text-red-400 leading-tight text-center font-bold">NO<br/>STM</span>`;
+
           shdSkillRef.current.innerHTML = `
              <div class="absolute inset-0 overflow-hidden outline-none pointer-events-none">
-                <div class="absolute bottom-0 left-0 right-0 bg-black/70" style="height: ${bgHeight}%"></div>
+                <div class="absolute bottom-0 left-0 right-0 bg-blue-500/20" style="height: ${bgHeight}%"></div>
              </div>
-             <span class="z-10">${content}</span>
-             <div class="absolute -bottom-2 -right-2 bg-slate-700 text-white text-[8px] flex items-center justify-center z-10 w-4 h-4 shadow border border-[#111827] font-bold">E</div>
+             <span class="z-10 text-[10px] md:text-[13px] font-black tracking-widest px-1.5 py-0.5 border-t border-b border-blue-500/50 bg-blue-950/80 drop-shadow-lg text-blue-100 uppercase">SHD</span>
+             ${cdOverlay}
+             <div class="absolute bottom-1 md:bottom-2 right-2 text-slate-400 text-[8px] z-10 font-bold drop-shadow-md">E</div>
           `;
       }
 
@@ -2056,7 +2110,7 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         });
 
         // Asteroids
-        state.asteroids.forEach(a => {
+        state.asteroids.forEach((a: any) => {
             // Cull offscreen
             if (a.x < cameraX - a.radius || a.x > cameraX + canvas.width + a.radius || 
                 a.y < cameraY - a.radius || a.y > cameraY + canvas.height + a.radius) return;
@@ -2065,50 +2119,75 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
             ctx.translate(a.x, a.y);
             ctx.rotate(a.angle);
             
-            if (asteroidSpriteRef.current) {
-                const img = asteroidSpriteRef.current;
-                const cols = 8;
-                const rows = 4;
-                const sw = img.width / cols;
-                const sh = img.height / rows;
-                const sx = (a.spriteIdxX || 0) * sw;
-                const sy = (a.spriteIdxY || 0) * sh;
+            // Base 3D Asteroid Shape
+            ctx.beginPath();
+            const points = 8;
+            for(let i=0; i<points; i++) {
+                const angle = (Math.PI * 2 / points) * i;
+                // Predictable irregularity based on asteroid ID
+                const r = a.radius * (0.8 + ((Math.sin(a.id * 10 + i) + 1) / 2) * 0.4);
+                if (i === 0) ctx.moveTo(r, 0);
+                else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            ctx.closePath();
 
-                ctx.drawImage(img, sx, sy, sw, sh, -a.radius*1.2, -a.radius*1.2, a.radius*2.4, a.radius*2.4);
-            } else {
-                ctx.fillStyle = '#1e293b'; // slate-800
-                ctx.strokeStyle = '#334155'; // slate-700
-                ctx.lineWidth = 4;
+            // Deep space 3D shading gradient
+            const grad = ctx.createRadialGradient(-a.radius*0.3, -a.radius*0.3, 0, 0, 0, a.radius * 1.2);
+            grad.addColorStop(0, '#334155'); // Highlight rim
+            grad.addColorStop(0.4, '#0f172a'); // Midtone rock
+            grad.addColorStop(1, '#020617'); // Pitch black shadow
+            
+            ctx.fillStyle = grad;
+            ctx.fill();
+            
+            // High-Tech HUD Scan Overlay (Wireframe lines on the rocks)
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.15)'; // Faint Cyan
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Kla'ed Energy Crystals embedded in some asteroids
+            if (a.id % 3 === 0 || a.id % 7 === 0) {
+                const isRose = a.id % 3 === 0;
+                ctx.fillStyle = isRose ? '#f43f5e' : '#8b5cf6'; // Rose or Purple crystals
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ctx.fillStyle;
                 
                 ctx.beginPath();
-                // Irregular shape based on their id
-                const points = 7;
-                for(let i=0; i<points; i++) {
-                    const angle = (Math.PI * 2 / points) * i;
-                    // Add some irregularity
-                    const r = a.radius * (0.8 + ((Math.sin(a.id || i + 1) + 1) / 2) * 0.4);
-                    if (i === 0) ctx.moveTo(r, 0);
-                    else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
-                }
+                // Draw a sharp crystal shard
+                ctx.moveTo(-a.radius * 0.2, 0);
+                ctx.lineTo(0, a.radius * 0.4);
+                ctx.lineTo(a.radius * 0.2, 0);
+                ctx.lineTo(0, -a.radius * 0.2);
                 ctx.closePath();
                 ctx.fill();
-                ctx.stroke();
-
-                // Craters inside
-                ctx.fillStyle = '#0f172a';
+                
+                // Add a bright core to the crystal
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(-a.radius * 0.3, -a.radius * 0.2, a.radius * 0.2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(a.radius * 0.4, a.radius * 0.3, a.radius * 0.15, 0, Math.PI * 2);
+                ctx.moveTo(-a.radius * 0.05, 0);
+                ctx.lineTo(0, a.radius * 0.2);
+                ctx.lineTo(a.radius * 0.05, 0);
+                ctx.closePath();
                 ctx.fill();
             }
 
-            // HP bar
+            // Holographic Telemetry HP bar (only shows if damaged)
             if (a.hp < (200 + civilizationLevel * 100)) {
                const maxHp = 200 + civilizationLevel * 100;
-               ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
-               ctx.fillRect(-a.radius, -a.radius - 15, a.radius * 2 * (a.hp / maxHp), 4);
+               ctx.rotate(-a.angle); // Un-rotate so the HP bar is always horizontal
+               
+               const barW = a.radius * 1.5;
+               const yOff = -a.radius - 20;
+
+               ctx.fillStyle = 'rgba(2, 6, 23, 0.8)';
+               ctx.fillRect(-barW/2, yOff, barW, 4);
+               
+               ctx.fillStyle = 'rgba(244, 63, 94, 0.8)'; // Rose color for hazard HP
+               ctx.shadowBlur = 8;
+               ctx.shadowColor = '#f43f5e';
+               ctx.fillRect(-barW/2, yOff, barW * (a.hp / maxHp), 4);
+               ctx.shadowBlur = 0;
             }
 
             ctx.restore();
@@ -2788,68 +2867,128 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
         }
         ctx.restore(); // restore camera bounds
 
-        // Minimap
+        // Minimap / Tactical Radar
         const mCanvas = minimapRef.current;
         if (mCanvas) {
            const mCtx = mCanvas.getContext('2d');
            if (mCtx) {
+              const now = performance.now() / 1000;
               mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
               
-              // Map bounds
-              mCtx.strokeStyle = '#991b1b';
+              // Background Base
+              mCtx.fillStyle = '#020617';
+              mCtx.fillRect(0, 0, mCanvas.width, mCanvas.height);
+
+              // Holographic Grid Lines
+              mCtx.strokeStyle = 'rgba(6, 182, 212, 0.1)';
               mCtx.lineWidth = 1;
-              mCtx.strokeRect(0, 0, mCanvas.width, mCanvas.height);
+              for(let i=0; i<mCanvas.width; i+=20) {
+                  mCtx.beginPath(); mCtx.moveTo(i, 0); mCtx.lineTo(i, mCanvas.height); mCtx.stroke();
+                  mCtx.beginPath(); mCtx.moveTo(0, i); mCtx.lineTo(mCanvas.width, i); mCtx.stroke();
+              }
               
-              // Safe Zone on Minimap
+              // Safe Zone Boundary (Earth Defense Perimeter)
               const smx = (150 / MAP_WIDTH) * mCanvas.width;
               const smy = (150 / MAP_HEIGHT) * mCanvas.height;
               const smw = ((MAP_WIDTH - 300) / MAP_WIDTH) * mCanvas.width;
               const smh = ((MAP_HEIGHT - 300) / MAP_HEIGHT) * mCanvas.height;
-              mCtx.strokeStyle = '#475569';
+              mCtx.strokeStyle = 'rgba(245, 158, 11, 0.3)'; // Amber dashed line
+              mCtx.setLineDash([2, 4]);
               mCtx.strokeRect(smx, smy, smw, smh);
+              mCtx.setLineDash([]);
               
-              // Draw enemies
+              // Dynamic Sweeping Radar Beam
+              const sweepAngle = (now * 2.5) % (Math.PI * 2);
+              const mxCenter = mCanvas.width / 2;
+              const myCenter = mCanvas.height / 2;
+              const radius = mCanvas.width * 0.8;
+
+              mCtx.save();
+              mCtx.translate(mxCenter, myCenter);
+              mCtx.rotate(sweepAngle);
+              
+              const radarGrad = mCtx.createConicGradient(0, 0, 0);
+              radarGrad.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+              radarGrad.addColorStop(0.1, 'rgba(6, 182, 212, 0)');
+              radarGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+              
+              mCtx.fillStyle = radarGrad;
+              mCtx.beginPath();
+              mCtx.moveTo(0, 0);
+              mCtx.arc(0, 0, radius, 0, Math.PI / 2);
+              mCtx.fill();
+              mCtx.restore();
+
+              // Draw Enemies (Red/Rose Blips)
               state.enemies.forEach((e: any) => {
                  const mx = (e.x / MAP_WIDTH) * mCanvas.width;
                  const my = (e.y / MAP_HEIGHT) * mCanvas.height;
                  
                  const isActive = state.drones.some((d: any) => d.targetId === e.id);
-                 mCtx.fillStyle = isActive ? '#38bdf8' : '#EF4444';
+                 const isBoss = e.type.startsWith('boss');
+                 
+                 mCtx.fillStyle = isActive ? '#00D9FF' : (isBoss ? '#ec4899' : '#f43f5e');
+                 mCtx.shadowBlur = isActive || isBoss ? 10 : 4;
+                 mCtx.shadowColor = mCtx.fillStyle;
+                 
                  mCtx.beginPath();
-                 mCtx.arc(mx, my, isActive ? 3 : 1.5, 0, Math.PI * 2);
+                 mCtx.arc(mx, my, isBoss ? 4 : (isActive ? 2.5 : 1.5), 0, Math.PI * 2);
                  mCtx.fill();
+                 mCtx.shadowBlur = 0;
+                 
+                 // Give bosses a secondary ping ring
+                 if (isBoss) {
+                     mCtx.strokeStyle = '#ec4899';
+                     mCtx.beginPath();
+                     mCtx.arc(mx, my, 6 + Math.sin(now * 5) * 2, 0, Math.PI * 2);
+                     mCtx.stroke();
+                 }
               });
 
-              // Collectibles
+              // Collectibles (Amber/Green/Blue Blips)
               state.collectibles.forEach((c: any) => {
                  const cx = (c.x / MAP_WIDTH) * mCanvas.width;
                  const cy = (c.y / MAP_HEIGHT) * mCanvas.height;
-                 let mColor = '#F59E0B';
+                 let mColor = '#F59E0B'; // Ammo
                  if (c.type === 'health') mColor = '#10b981';
                  else if (c.type === 'shield') mColor = '#3b82f6';
-                 else if (c.type === 'speed') mColor = '#fbbf24';
                  else if (c.type === 'weapon') mColor = '#dc2626';
-                 else if (c.type === 'stamina') mColor = '#a855f7';
                  
                  mCtx.fillStyle = mColor;
+                 mCtx.shadowBlur = 6;
+                 mCtx.shadowColor = mColor;
                  mCtx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+                 mCtx.shadowBlur = 0;
               });
 
-              // Draw player
+              // Draw Player (Bright Cyan Core)
               const px = (state.player.x / MAP_WIDTH) * mCanvas.width;
               const py = (state.player.y / MAP_HEIGHT) * mCanvas.height;
-              mCtx.fillStyle = '#00D9FF';
+              mCtx.fillStyle = '#ffffff';
+              mCtx.shadowBlur = 12;
+              mCtx.shadowColor = '#22d3ee'; // Cyan glow
               mCtx.beginPath();
               mCtx.arc(px, py, 2.5, 0, Math.PI * 2);
               mCtx.fill();
+              mCtx.shadowBlur = 0;
               
-              // viewport rect on minimap
+              // Viewport Rect (Shows what the camera sees on the map)
               const vx = (cameraX / MAP_WIDTH) * mCanvas.width;
               const vy = (cameraY / MAP_HEIGHT) * mCanvas.height;
               const vw = (canvas.width / MAP_WIDTH) * mCanvas.width;
               const vh = (canvas.height / MAP_HEIGHT) * mCanvas.height;
-              mCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+              
+              mCtx.strokeStyle = 'rgba(34, 211, 238, 0.4)'; // Cyan viewport
+              mCtx.lineWidth = 1;
               mCtx.strokeRect(vx, vy, vw, vh);
+              
+              // Crosshairs framing the viewport
+              mCtx.beginPath();
+              mCtx.moveTo(vx + vw/2, vy - 2); mCtx.lineTo(vx + vw/2, vy + 2); // Top tick
+              mCtx.moveTo(vx + vw/2, vy + vh - 2); mCtx.lineTo(vx + vw/2, vy + vh + 2); // Bot tick
+              mCtx.moveTo(vx - 2, vy + vh/2); mCtx.lineTo(vx + 2, vy + vh/2); // Left tick
+              mCtx.moveTo(vx + vw - 2, vy + vh/2); mCtx.lineTo(vx + vw + 2, vy + vh/2); // Right tick
+              mCtx.stroke();
            }
         }
     };
@@ -2868,275 +3007,142 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
   }, [gameKey]); 
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-[#0A0F1F] overflow-hidden font-sans select-none border border-[#111827] rounded-xl shadow-[0_0_20px_rgba(0,217,255,0.05)]">
-      {/* Top Left: HP / Stamina */}
-      <div className="absolute top-2 left-2 md:top-4 md:left-4 flex flex-col gap-2 md:gap-3 pointer-events-none z-10 w-40 md:w-56 origin-top-left scale-[0.7] sm:scale-90 md:scale-100">
-        <div className="bg-[#111827]/90 px-3 md:px-4 py-2 md:py-3 border-l-4 border-l-[#EF4444] border border-[#111827] shadow-[0_0_10px_rgba(239,68,68,0.15)]">
-           <div className="flex justify-between items-center mb-1.5">
-             <span className="text-[10px] text-[#F8FAFC] font-bold tracking-widest uppercase">HP</span>
-             <span className="text-[10px] font-mono font-bold text-[#EF4444]" ref={hpTextRef}>100%</span>
-           </div>
-           <div className="w-full h-2.5 bg-[#0A0F1F] rounded-sm overflow-hidden">
-              <div ref={hpRef} className="h-full bg-[#EF4444] w-full transition-all duration-75 relative shadow-[0_0_8px_rgba(239,68,68,0.8)]">
-                <div className="absolute inset-0 bg-white/20 w-full"></div>
-              </div>
-           </div>
-        </div>
-        
-        <div className="bg-[#111827]/90 px-4 py-3 border-l-4 border-l-[#3b82f6] border border-[#111827] shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-           <div className="flex justify-between items-center mb-1.5">
-             <span className="text-[10px] text-[#F8FAFC] font-bold tracking-widest uppercase">Shield</span>
-             <span className="text-[10px] font-mono font-bold text-[#3b82f6]" ref={shieldTextRef}>0%</span>
-           </div>
-           <div className="w-full h-2.5 bg-[#0A0F1F] rounded-sm overflow-hidden">
-              <div ref={shieldRef} className="h-full bg-[#3b82f6] w-0 relative shadow-[0_0_8px_rgba(59,130,246,0.8)] transition-all duration-75">
-              </div>
-           </div>
-        </div>
+    <div ref={containerRef} className="relative w-full h-full bg-[#020617] overflow-hidden font-sans select-none border border-cyan-900/50 shadow-[inset_0_0_50px_rgba(6,182,212,0.05)]">
+      {/* Tactical Grid Overlay */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(6,182,212,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.2)_1px,transparent_1px)] bg-[size:40px_40px] z-0"></div>
 
-        <div className="bg-[#111827]/90 px-4 py-3 border-l-4 border-l-[#fbbf24] border border-[#111827] shadow-[0_0_10px_rgba(251,191,36,0.15)]">
-           <div className="flex justify-between items-center mb-1.5">
-             <span className="text-[10px] text-[#F8FAFC] font-bold tracking-widest uppercase">Stamina</span>
-             <span className="text-[10px] font-mono font-bold text-[#fbbf24]" ref={staminaTextRef}>100%</span>
-           </div>
-           <div className="w-full h-2.5 bg-[#0A0F1F] rounded-sm overflow-hidden">
-              <div ref={staminaRef} className="h-full bg-[#fbbf24] w-full relative shadow-[0_0_8px_rgba(251,191,36,0.8)] transition-all duration-75">
-              </div>
-           </div>
-        </div>
-        
-        <div ref={powerupRef} className="text-[10px] font-mono font-bold text-[#fbbf24] mt-1 shadow-sm drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]">
+      {/* Top Left: Hull Telemetry */}
+      <div className="absolute top-4 left-4 flex flex-col pointer-events-none z-10 w-56 origin-top-left" style={{ transform: `scale(${uiScale})` }}>
+        <div className="bg-slate-900/80 p-3 border border-cyan-900/50 backdrop-blur-md shadow-[0_0_20px_rgba(6,182,212,0.15)] relative overflow-hidden" style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+          <div className="absolute top-0 right-0 w-4 h-4 bg-cyan-500/20" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          
+          <div className="flex justify-between items-end mb-1">
+              <span className="text-[10px] text-cyan-500 font-mono font-bold tracking-[0.2em]">HULL INTEGRITY</span>
+              <span className="text-xs text-white font-mono" ref={hpTextRef}>100%</span>
+          </div>
+          <div className="w-full h-1.5 bg-slate-800"><div ref={hpRef} className="h-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] transition-all"></div></div>
+          
+          <div className="flex justify-between items-end mt-2 mb-1">
+              <span className="text-[10px] text-blue-400 font-mono font-bold tracking-[0.2em]">DEF_SHIELD</span>
+              <span className="text-xs text-white font-mono" ref={shieldTextRef}>0%</span>
+          </div>
+          <div className="w-full h-1 bg-slate-800"><div ref={shieldRef} className="h-full bg-blue-500 shadow-[0_0_8px_#3b82f6] transition-all"></div></div>
+
+          <div className="flex justify-between items-end mt-2 mb-1">
+              <span className="text-[10px] text-rose-500 font-mono font-bold tracking-[0.2em]">CORE ENERGY</span>
+              <span className="text-xs text-white font-mono" ref={staminaTextRef}>100%</span>
+          </div>
+          <div className="w-full h-1 bg-slate-800"><div ref={staminaRef} className="h-full bg-rose-500 shadow-[0_0_8px_#f43f5e] transition-all"></div></div>
+          
+          <div ref={powerupRef}></div>
         </div>
       </div>
 
-      {/* Top Center: Wave / Score / Time */}
-      <div className="absolute top-2 md:top-4 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10 w-32 md:w-48 origin-top scale-[0.75] sm:scale-95 md:scale-100">
-        <div className="bg-[#111827]/90 border border-[#00D9FF]/30 px-4 md:px-6 py-1.5 md:py-2 rounded-t flex flex-col items-center shadow-[0_0_15px_rgba(0,217,255,0.1)] w-full">
-           <span className="text-[10px] text-[#00D9FF] font-bold tracking-widest uppercase mb-1">WAVE</span>
-           <span ref={waveRef} className="text-xl font-bold text-[#F8FAFC] font-mono leading-none tracking-widest">01</span>
+      {/* Top Center: Mission Telemetry */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10 w-48 origin-top" style={{ transform: `translateX(-50%) scale(${uiScale})` }}>
+        <div className="bg-cyan-950/40 border border-cyan-500/30 backdrop-blur-md px-6 py-2 flex flex-col items-center shadow-[0_0_20px_rgba(6,182,212,0.15)] w-full relative" style={{ clipPath: 'polygon(5% 0, 95% 0, 100% 100%, 0 100%)' }}>
+           <span className="text-[10px] text-cyan-400 font-mono font-bold tracking-[0.3em] uppercase mb-1">WAVE</span>
+           <span ref={waveRef} className="text-2xl font-black text-white font-mono leading-none tracking-widest drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">01</span>
         </div>
-        <div className="bg-[#0A0F1F]/90 border border-t-0 border-[#00D9FF]/30 px-6 py-1.5 rounded-b flex flex-col items-center w-full">
-           <div className="flex justify-between w-full text-[10px] font-mono text-[#F8FAFC]">
-             <span>TIME</span>
-             <span ref={timeRef} className="text-[#8B5CF6]">00:00</span>
+        <div className="bg-slate-900/60 border border-t-0 border-cyan-900/50 backdrop-blur-md px-6 py-1.5 flex flex-col items-center w-[90%]">
+           <div className="flex justify-between w-full text-[10px] font-mono font-bold text-slate-300">
+             <span>T-MINUS</span>
+             <span ref={timeRef} className="text-cyan-300">00:00</span>
            </div>
-           <div className="flex justify-between w-full text-[10px] font-mono text-[#F8FAFC] mt-0.5">
+           <div className="flex justify-between w-full text-[10px] font-mono font-bold text-slate-300 mt-0.5">
              <span>SCORE</span>
-             <span ref={scoreRef} className="text-[#F59E0B]">0</span>
+             <span ref={scoreRef} className="text-rose-400">0</span>
            </div>
         </div>
       </div>
 
-      {/* Top Right: Minimap & Stats */}
-      <div className="absolute top-2 md:top-4 right-2 md:right-4 flex gap-2 md:gap-4 pointer-events-none z-10 origin-top-right scale-[0.7] sm:scale-90 md:scale-100">
-        <button 
-          onClick={togglePause} 
-          className="pointer-events-auto bg-[#111827]/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 px-3 py-1.5 rounded-lg shadow-lg text-[10px] font-bold tracking-widest flex items-center h-fit transition-colors"
-        >
-          PAUSE
+      {/* Top Right: Tactical Radar & Algo */}
+      <div className="absolute top-4 right-4 flex gap-4 pointer-events-none z-10 origin-top-right" style={{ transform: `scale(${uiScale})` }}>
+        <button onClick={togglePause} className="pointer-events-auto bg-slate-900/80 hover:bg-cyan-950 border border-cyan-900/50 hover:border-cyan-500 text-cyan-500 hover:text-cyan-300 px-3 py-1.5 shadow-[0_0_15px_rgba(6,182,212,0.1)] text-[10px] font-mono font-bold tracking-widest h-fit transition-all backdrop-blur-sm" style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0% 100%)' }}>
+          SYS_PAUSE
         </button>
         <div className="flex flex-col items-end gap-2">
-           <div className="w-28 h-28 bg-[#111827]/90 border border-[#8B5CF6]/40 p-1 flex items-center justify-center relative overlow-hidden shadow-[0_0_10px_rgba(139,92,246,0.15)]">
-             {/* Minimap Canvas */}
-             <canvas ref={minimapRef} width={100} height={100} className="w-full h-full bg-[#0A0F1F] border border-[#111827] relative" />
-             <div className="absolute -bottom-2 -left-2 bg-[#8B5CF6] text-white text-[9px] font-mono px-1.5 py-0.5 rounded-sm">MAP</div>
+           <div className="w-32 h-32 bg-slate-950/80 border border-cyan-500/30 p-1 flex items-center justify-center relative shadow-[0_0_20px_rgba(6,182,212,0.15)] backdrop-blur-md" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 85% 100%, 0 100%)' }}>
+             <canvas ref={minimapRef} width={120} height={120} className="w-full h-full bg-[#020617] border border-cyan-900/50 relative" />
+             <div className="absolute top-0 right-0 bg-cyan-500/20 w-4 h-4" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}></div>
            </div>
            
            <div className="flex flex-col items-end gap-1.5 w-full mt-1">
-              <div className="bg-[#111827]/90 border border-[#EF4444]/40 px-3 py-1.5 shadow-[0_0_10px_rgba(239,68,68,0.1)] w-full text-right">
-                 <span ref={targetsRef} className="text-[10px] text-[#EF4444] font-mono font-bold">TARGETS: 0</span>
+              <div className="bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 shadow-[0_0_10px_rgba(244,63,94,0.1)] w-full text-right backdrop-blur-sm" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10% 100%)' }}>
+                 <span ref={targetsRef} className="text-[10px] text-rose-400 font-mono font-bold tracking-widest">TARGETS: 0</span>
               </div>
               
-              {/* CPU Algo indicator */}
-              <div className="bg-[#111827]/90 border border-[#f59e0b]/40 shadow-[0_0_10px_rgba(245,158,11,0.1)] flex flex-col w-full text-white">
-                 <div className="bg-[#f59e0b]/10 px-3 py-1 border-b border-[#f59e0b]/20 flex justify-between items-center gap-4">
-                    <span className="text-[9px] text-[#f59e0b] font-mono tracking-widest font-bold">CPU ALGO</span>
+              <div className="bg-slate-900/80 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.1)] flex flex-col w-full text-white backdrop-blur-sm" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10% 100%)' }}>
+                 <div className="bg-amber-500/10 px-3 py-1 border-b border-amber-500/20 flex justify-between items-center gap-4">
+                    <span className="text-[9px] text-amber-500 font-mono tracking-widest font-bold">CPU ALGO</span>
                     <span ref={algoRef} className="text-[11px] text-white font-mono font-bold drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]">FCFS</span>
                  </div>
-                 <div ref={algoStatsRef} className="px-3 py-1 font-mono text-[9px] text-slate-300 text-right leading-tight min-h-[30px] flex flex-col justify-end">
-                    CORES: 2
-                 </div>
+                 <div ref={algoStatsRef} className="px-3 py-1.5 font-mono text-[9px] text-slate-300 text-right leading-tight min-h-[30px] flex flex-col justify-end"></div>
               </div>
 
-              {/* Drone Range Configuration */}
-              <div className="bg-[#111827]/90 border border-[#38bdf8]/40 shadow-[0_0_10px_rgba(56,189,248,0.1)] flex flex-col w-full text-white pointer-events-auto">
-                 <div className="bg-[#38bdf8]/10 px-3 py-1 border-b border-[#38bdf8]/20 flex justify-between items-center gap-2">
-                    <span className="text-[9px] text-[#38bdf8] font-mono tracking-widest font-bold">DRONE RANGE</span>
+              <div className="bg-slate-900/80 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.1)] flex flex-col w-full text-white pointer-events-auto backdrop-blur-sm" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10% 100%)' }}>
+                 <div className="bg-cyan-500/10 px-3 py-1 border-b border-cyan-500/20 flex justify-between items-center gap-2">
+                    <span className="text-[9px] text-cyan-400 font-mono tracking-widest font-bold">DRONE RANGE</span>
                  </div>
-                 <div className="px-3 py-1.5 flex justify-between items-center bg-[#111827]">
-                    <button onClick={() => setDroneRange(r => Math.max(300, r - 100))} className="text-[#38bdf8] hover:text-white bg-[#38bdf8]/10 hover:bg-[#38bdf8]/30 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors"> - </button>
-                    <span className="text-[#38bdf8] font-mono text-[10px] font-bold min-w-[30px] text-center">{droneRange}</span>
-                    <button onClick={() => setDroneRange(r => Math.min(2000, r + 100))} className="text-[#38bdf8] hover:text-white bg-[#38bdf8]/10 hover:bg-[#38bdf8]/30 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors"> + </button>
+                 <div className="px-3 py-1.5 flex justify-between items-center bg-slate-950/50">
+                    <button onClick={() => setDroneRange(r => Math.max(300, r - 100))} className="text-cyan-400 hover:text-white bg-cyan-900/30 hover:bg-cyan-500/50 px-2 py-0.5 text-[10px] font-bold transition-colors"> - </button>
+                    <span className="text-cyan-300 font-mono text-[10px] font-bold min-w-[30px] text-center">{droneRange}</span>
+                    <button onClick={() => setDroneRange(r => Math.min(2000, r + 100))} className="text-cyan-400 hover:text-white bg-cyan-900/30 hover:bg-cyan-500/50 px-2 py-0.5 text-[10px] font-bold transition-colors"> + </button>
                  </div>
               </div>
            </div>
         </div>
       </div>
 
-      {/* Floating Notification */}
-      <div 
-        ref={notificationRef} 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[50%] pointer-events-none z-50 flex flex-col items-center justify-center text-center opacity-0 transition-opacity duration-300"
-      >
+      <div ref={notificationRef} className="absolute top-1/2 left-0 right-0 -translate-y-1/2 pointer-events-none z-50 flex flex-col items-center justify-center text-center opacity-0 transition-opacity duration-300 pointer-events-none"></div>
+
+      <div ref={bossWarningUIRef} className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50 flex flex-col items-center justify-center text-center opacity-0 transition-opacity duration-100" style={{ transform: `translate(-50%, -50%) scale(${uiScale})` }}>
+        <div className="text-4xl font-black text-rose-500 font-mono tracking-[0.3em] drop-shadow-[0_0_15px_rgba(244,63,94,1)] animate-pulse">WARNING</div>
+        <div className="text-sm font-bold text-white tracking-widest mt-2 uppercase bg-rose-500/20 px-8 py-1 border border-rose-500">MAJOR THREAT INCOMING</div>
       </div>
 
-      {/* Boss Warning Notification */}
-      <div 
-        ref={bossWarningUIRef} 
-        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50 flex flex-col items-center justify-center text-center opacity-0 transition-opacity duration-100"
-      >
-        <div className="text-4xl font-black text-[#EF4444] font-mono tracking-[0.3em] drop-shadow-[0_0_15px_rgba(239,68,68,1)] animate-pulse">
-            WARNING
-        </div>
-        <div className="text-sm font-bold text-[#F8FAFC] tracking-widest mt-2 uppercase bg-[#EF4444]/20 px-8 py-1 border border-[#EF4444]">
-            MAJOR THREAT INCOMING
-        </div>
-      </div>
-
-      {/* Controls Info overlays */}
-      {!isTouchDevice && (
-        <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-500 font-bold flex flex-col gap-1 pointer-events-none z-10 hidden lg:flex">
-            <div>[W A S D] MOVE</div>
-            <div>[SHIFT]   BOOST</div>
-            <div>[MOUSE]   AIM & FIRE</div>
-            <div>[ESC]     PAUSE</div>
-        </div>
-      )}
-
-      {/* Bottom: Weapon Slots & Ammo */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 hidden md:flex gap-6 items-end pointer-events-none z-10">
-        {/* Weapons */}
-        <div className="flex gap-2">
-          <div ref={wpn1Ref} className="w-12 h-12 bg-[#0A0F1F] border-2 border-[#00D9FF] shadow-[0_0_10px_rgba(0,217,255,0.2)] relative flex items-center justify-center font-mono text-[#00D9FF] text-[10px] font-bold">
-            WPN-1
-            <div className="absolute -top-2 -left-2 bg-[#00D9FF] text-[#0A0F1F] px-1 text-[8px] rounded-sm">1</div>
-          </div>
-          <div ref={wpn2Ref} className="w-12 h-12 bg-[#111827] border border-[#111827] opacity-60 relative flex items-center justify-center font-mono text-slate-500 text-[10px] font-bold">
-            WPN-2
-            <div className="absolute -top-2 -left-2 bg-slate-800 text-slate-400 px-1 text-[8px] rounded-sm">2</div>
-          </div>
+      {/* Bottom: Desktop Weapons/Skills */}
+      <div className="absolute bottom-4 left-1/2 hidden md:flex gap-2 lg:gap-6 items-end pointer-events-none z-10 w-max max-w-[95vw] justify-center origin-bottom" style={{ transform: `translateX(-50%) scale(${uiScale})` }}>
+        <div className="flex gap-1 md:gap-2 shrink-0">
+          <div ref={wpn1Ref}></div>
+          <div ref={wpn2Ref}></div>
         </div>
 
-        {/* Ammo */}
-        <div className="bg-[#111827]/90 px-6 py-1.5 border-l-4 border-[#F59E0B] flex flex-col items-center">
-            <span className="text-[9px] text-[#F8FAFC] tracking-widest">AMMO</span>
-            <span className="text-xl font-mono text-[#F59E0B] font-bold leading-none"><span ref={ammoRef}>150</span><span className="text-xs text-slate-500"></span></span>
+        <div className="bg-slate-900/80 px-4 lg:px-8 py-2 border-l-4 border-amber-500 flex flex-col items-center backdrop-blur-md shadow-[0_0_15px_rgba(245,158,11,0.15)] shrink-0" style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0% 100%)' }}>
+            <span className="text-[8px] lg:text-[9px] text-amber-500 font-mono font-bold tracking-[0.2em]">MUNITIONS</span>
+            <span className="text-xl lg:text-2xl font-mono text-white font-bold leading-none"><span ref={ammoRef}>150</span></span>
         </div>
 
-        {/* Skills */}
-        <div className="flex gap-2">
-          <div ref={dshRef} className="w-12 h-12 bg-[#111827] border border-slate-700 relative flex items-center justify-center font-mono text-slate-500 text-[10px]">
-            DSH
-            <div className="absolute -bottom-1 right-0 bg-[#8B5CF6] text-white px-1 text-[7px] rounded-sm">Q</div>
-          </div>
-          <div ref={shdSkillRef} className="w-12 h-12 bg-[#111827] border border-slate-700 relative flex items-center justify-center font-mono text-slate-500 text-[10px]">
-            SHD
-            <div className="absolute -bottom-1 right-0 bg-slate-700 text-white px-1 text-[7px] rounded-sm">E</div>
-          </div>
+        <div className="flex gap-1 md:gap-2 shrink-0">
+          <div ref={dshRef}></div>
+          <div ref={shdSkillRef}></div>
         </div>
       </div>
       
       {/* Mobile Controls Overlay */}
       {isTouchDevice && (
         <>
-            {/* Left Joystick (Move) */}
-            <div 
-              className="absolute z-20 pointer-events-none"
-              style={{
-                 left: `${hudLayout.moveJoystick.x}%`,
-                 top: `${hudLayout.moveJoystick.y}%`,
-                 transform: `translate(-50%, -50%) scale(${hudLayout.moveJoystick.scale})`,
-                 opacity: hudLayout.moveJoystick.opacity,
-              }}
-            >
-                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto shadow-[0_0_20px_rgba(239,68,68,0.2)] rounded-full">
-                    <VirtualJoystick 
-                        onMove={(x, y, active) => { mobileMoveRef.current = { x, y, active }; }} 
-                        size={120} color="rgba(239, 68, 68, 0.3)" 
-                    />
+            <div className="absolute z-20 pointer-events-none" style={{ left: `${hudLayout.moveJoystick.x}%`, top: `${hudLayout.moveJoystick.y}%`, transform: `translate(-50%, -50%) scale(${hudLayout.moveJoystick.scale})`, opacity: hudLayout.moveJoystick.opacity }}>
+                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto rounded-full">
+                    <VirtualJoystick onMove={(x, y, active) => { mobileMoveRef.current = { x, y, active }; }} size={120} color="rgba(6, 182, 212, 1)" />
                 </div>
             </div>
             
-            {/* Right Joystick & Abilities (Aim + Skills ML Style) */}
-            <div 
-              className="absolute z-20 pointer-events-none"
-              style={{
-                 left: `${hudLayout.wpnBtn.x}%`,
-                 top: `${hudLayout.wpnBtn.y}%`,
-                 transform: `translate(-50%, -50%) scale(${hudLayout.wpnBtn.scale})`,
-                 opacity: hudLayout.wpnBtn.opacity,
-              }}
-            >
-                <button
-                    id="mobile-wpn-btn"
-                    onClick={() => {
-                        const e = new KeyboardEvent('keydown', { key: 'x' });
-                        window.dispatchEvent(e);
-                    }}
-                    className="w-14 h-14 rounded-full bg-slate-900/90 border border-amber-500/50 font-bold text-xs text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)] active:bg-amber-500/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
-                >
-                    WPN
-                </button>
+            <div className="absolute z-20 pointer-events-none" style={{ left: `${hudLayout.wpnBtn.x}%`, top: `${hudLayout.wpnBtn.y}%`, transform: `translate(-50%, -50%) scale(${hudLayout.wpnBtn.scale})`, opacity: hudLayout.wpnBtn.opacity }}>
+                <button id="mobile-wpn-btn" onClick={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })); }} className="w-16 h-16 bg-rose-950/60 border-2 border-rose-500 flex items-center justify-center text-rose-400 font-mono font-bold text-sm shadow-[0_0_15px_rgba(244,63,94,0.4)] backdrop-blur-md active:bg-rose-500/30 transition-transform active:scale-95 pointer-events-auto" style={{ clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)' }}>WPN</button>
             </div>
 
-            <div 
-              className="absolute z-20 pointer-events-none"
-              style={{
-                 left: `${hudLayout.shdBtn.x}%`,
-                 top: `${hudLayout.shdBtn.y}%`,
-                 transform: `translate(-50%, -50%) scale(${hudLayout.shdBtn.scale})`,
-                 opacity: hudLayout.shdBtn.opacity,
-              }}
-            >
-                <button
-                    id="mobile-shd-btn"
-                    onClick={() => {
-                        const e = new KeyboardEvent('keydown', { key: 'e' });
-                        window.dispatchEvent(e);
-                    }}
-                    className="w-16 h-16 rounded-full bg-slate-900/90 border border-[#8B5CF6]/50 font-bold text-xs text-[#8B5CF6] shadow-[0_0_15px_rgba(139,92,246,0.4)] active:bg-[#8B5CF6]/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
-                >
-                    SHD
-                </button>
+            <div className="absolute z-20 pointer-events-none" style={{ left: `${hudLayout.shdBtn.x}%`, top: `${hudLayout.shdBtn.y}%`, transform: `translate(-50%, -50%) scale(${hudLayout.shdBtn.scale})`, opacity: hudLayout.shdBtn.opacity }}>
+                <button id="mobile-shd-btn" onClick={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' })); }} className="w-16 h-16 bg-blue-950/60 border-2 border-blue-400 flex items-center justify-center text-blue-300 font-mono font-bold text-sm shadow-[0_0_15px_rgba(96,165,250,0.4)] backdrop-blur-md active:bg-blue-400/30 transition-transform active:scale-95 pointer-events-auto" style={{ clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)' }}>SHD</button>
             </div>
 
-            <div 
-              className="absolute z-20 pointer-events-none"
-              style={{
-                 left: `${hudLayout.dshBtn.x}%`,
-                 top: `${hudLayout.dshBtn.y}%`,
-                 transform: `translate(-50%, -50%) scale(${hudLayout.dshBtn.scale})`,
-                 opacity: hudLayout.dshBtn.opacity,
-              }}
-            >
-                <button
-                    id="mobile-boost-btn"
-                    data-active="false"
-                    onPointerDown={(e) => { e.currentTarget.dataset.active = "true"; }}
-                    onPointerUp={(e) => { e.currentTarget.dataset.active = "false"; }}
-                    onPointerCancel={(e) => { e.currentTarget.dataset.active = "false"; }}
-                    className="w-16 h-16 rounded-full bg-slate-900/90 border border-slate-400/50 font-bold text-xs text-white shadow-[0_0_15px_rgba(255,255,255,0.2)] active:bg-slate-400/30 flex items-center justify-center backdrop-blur-sm pointer-events-auto transition-transform active:scale-95"
-                >
-                    DASH
-                </button>
+            <div className="absolute z-20 pointer-events-none" style={{ left: `${hudLayout.dshBtn.x}%`, top: `${hudLayout.dshBtn.y}%`, transform: `translate(-50%, -50%) scale(${hudLayout.dshBtn.scale})`, opacity: hudLayout.dshBtn.opacity }}>
+                <button id="mobile-boost-btn" data-active="false" onPointerDown={(e) => { e.currentTarget.dataset.active = "true"; }} onPointerUp={(e) => { e.currentTarget.dataset.active = "false"; }} onPointerCancel={(e) => { e.currentTarget.dataset.active = "false"; }} className="w-14 h-14 bg-slate-800/60 border border-slate-300 flex items-center justify-center text-slate-200 font-mono font-bold text-xs shadow-[0_0_10px_rgba(255,255,255,0.2)] backdrop-blur-md active:bg-slate-400/30 transition-transform active:scale-95 pointer-events-auto" style={{ clipPath: 'polygon(20% 0%, 100% 0%, 80% 100%, 0% 100%)' }}>BOOST</button>
             </div>
                 
-            <div 
-              className="absolute z-20 pointer-events-none"
-              style={{
-                 left: `${hudLayout.aimJoystick.x}%`,
-                 top: `${hudLayout.aimJoystick.y}%`,
-                 transform: `translate(-50%, -50%) scale(${hudLayout.aimJoystick.scale})`,
-                 opacity: hudLayout.aimJoystick.opacity,
-              }}
-            >
-                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto opacity-80 shadow-[0_0_20px_rgba(0,217,255,0.2)] rounded-full relative">
-                    <div className="absolute inset-0 rounded-full border border-sky-400/30 pointer-events-none" style={{ padding: '4px', background: 'radial-gradient(circle, rgba(0,217,255,0.15) 0%, rgba(0,0,0,0) 70%)'}}></div>
-                    
-                    <VirtualJoystick 
-                        onMove={(x, y, active) => { mobileAimRef.current = { x, y, active }; }} 
-                        size={120} color="rgba(0, 217, 255, 0.4)" 
-                    />
+            <div className="absolute z-20 pointer-events-none" style={{ left: `${hudLayout.aimJoystick.x}%`, top: `${hudLayout.aimJoystick.y}%`, transform: `translate(-50%, -50%) scale(${hudLayout.aimJoystick.scale})`, opacity: hudLayout.aimJoystick.opacity }}>
+                <div className="w-[120px] h-[120px] flex items-center justify-center pointer-events-auto rounded-full">
+                    <VirtualJoystick onMove={(x, y, active) => { mobileAimRef.current = { x, y, active }; }} size={120} color="rgba(244, 63, 94, 1)" />
                 </div>
             </div>
           </>
@@ -3144,43 +3150,43 @@ export function GameCanvas({ gameKey, onGameOver, onReturnMenu, civilizationLeve
 
       <canvas ref={canvasRef} className="block w-full h-full z-0 cursor-none relative touch-none" />
 
-      {isPaused && (
-        <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6">
-          <h2 className="text-4xl font-bold text-white mb-2 tracking-tight">PAUSED</h2>
-          <p className="text-slate-400 mb-8 max-w-md text-center">System operation suspended.</p>
+      {/* Critical Health Vignette Overlay */}
+      <div 
+        ref={critVignetteRef} 
+        className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-150 opacity-0"
+        style={{ background: 'radial-gradient(circle, transparent 50%, rgba(220, 38, 38, 0.4) 100%)' }}
+      ></div>
+      
+      {/* Cinematic CRT Scanline Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-20 opacity-10 mix-blend-overlay bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]"></div>
 
-          <div className="flex flex-col md:flex-row gap-4">
-            <button 
-              onClick={togglePause}
-              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-indigo-500/20 active:scale-95"
-            >
-              Resume Operation
-            </button>
-            {isTouchDevice && (
-                <button 
-                  onClick={() => setIsHudEditorOpen(true)}
-                  className="flex items-center justify-center gap-2 bg-[#f59e0b] hover:bg-[#fbbf24] text-slate-950 px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-[#f59e0b]/20 active:scale-95"
-                >
-                  Edit HUD
+      {isPaused && (
+        <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center p-6">
+          <div className="border border-cyan-500/30 bg-cyan-950/20 p-10 flex flex-col items-center shadow-[0_0_30px_rgba(6,182,212,0.15)]" style={{ clipPath: 'polygon(0 0, 95% 0, 100% 5%, 100% 100%, 5% 100%, 0 95%)' }}>
+              <h2 className="text-4xl font-bold text-cyan-400 font-mono mb-2 tracking-[0.3em] uppercase">System Paused</h2>
+              <p className="text-cyan-100/50 font-mono text-sm mb-10 tracking-widest text-center border-b border-cyan-900/50 pb-4 w-full">TELEMETRY SUSPENDED</p>
+
+              <div className="flex flex-col gap-4 w-full min-w-[250px]">
+                <button onClick={togglePause} className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-8 py-4 font-mono font-bold tracking-widest transition-all active:scale-95 flex items-center justify-center gap-3">
+                  <div className="w-2 h-2 bg-slate-950 animate-pulse"></div>
+                  RESUME
                 </button>
-            )}
-            <button 
-              onClick={onReturnMenu}
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all focus:ring-4 focus:ring-slate-500/20 active:scale-95"
-            >
-              Main Menu
-            </button>
+                {isTouchDevice && (
+                    <button onClick={() => setIsHudEditorOpen(true)} className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-cyan-400 px-8 py-4 font-mono font-bold tracking-widest transition-all active:scale-95">
+                      CONFIGURE HUD
+                    </button>
+                )}
+                <button onClick={onReturnMenu} className="bg-slate-900 hover:bg-rose-950 border border-rose-900/50 hover:border-rose-500 text-rose-500 hover:text-rose-400 px-8 py-4 font-mono font-bold tracking-widest transition-all active:scale-95">
+                  ABORT MISSION
+                </button>
+              </div>
           </div>
         </div>
       )}
 
-      {/* HUD EDITOR MOUNT OVERLAY */}
       {isHudEditorOpen && (
           <div className="absolute inset-0 z-[100]">
-             <HudEditor onExit={() => {
-                 setIsHudEditorOpen(false);
-                 setHudLayout(getSavedLayout());
-             }} />
+             <HudEditor onExit={() => { setIsHudEditorOpen(false); setHudLayout(getSavedLayout()); }} />
           </div>
       )}
     </div>

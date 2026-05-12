@@ -3,12 +3,15 @@ import React, { useRef, useState, useEffect } from 'react';
 interface JoystickProps {
     onMove: (x: number, y: number, active: boolean) => void;
     size?: number;
-    color?: string;
+    color?: string; // e.g., 'rgba(6, 182, 212, 1)' for Cyan, 'rgba(244, 63, 94, 1)' for Rose
 }
 
-export const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, size = 120, color = 'rgba(0, 217, 255, 0.3)' }) => {
-    const defaultColor = 'rgba(255, 255, 255, 0.15)';
-    const handleSize = size * 0.4;
+export const VirtualJoystick: React.FC<JoystickProps> = ({ 
+    onMove, 
+    size = 120, 
+    color = 'rgba(6, 182, 212, 1)' // Default to Cyan
+}) => {
+    const handleSize = size * 0.35;
     const maxDist = size / 2 - handleSize / 2;
 
     const baseRef = useRef<HTMLDivElement>(null);
@@ -32,7 +35,6 @@ export const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, size = 120, c
 
         setHandlePos({ x: dx, y: dy });
 
-        // Normalize
         const nx = dx / maxDist;
         const ny = dy / maxDist;
         onMove(nx, ny, true);
@@ -56,6 +58,9 @@ export const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, size = 120, c
         onMove(0, 0, false);
     };
 
+    // Extract raw RGB for alpha manipulation
+    const rgb = color.replace(/rgba?\(|\)|\s/g, '').split(',').slice(0, 3).join(',');
+
     return (
         <div
             ref={baseRef}
@@ -63,25 +68,55 @@ export const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, size = 120, c
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            className="rounded-full flex items-center justify-center touch-none backdrop-blur-sm"
+            className="rounded-full flex items-center justify-center touch-none backdrop-blur-sm relative"
             style={{
                 width: size,
                 height: size,
-                backgroundColor: active ? color : defaultColor,
-                border: `2px solid ${active ? color.replace('0.3', '0.6') : 'rgba(255,255,255,0.2)'}`,
-                transition: active ? 'none' : 'background-color 0.2s, border 0.2s'
+                backgroundColor: `rgba(${rgb}, ${active ? '0.15' : '0.05'})`,
+                border: `1px solid rgba(${rgb}, ${active ? '0.5' : '0.2'})`,
+                boxShadow: active ? `0 0 20px rgba(${rgb}, 0.3)` : 'none',
+                transition: 'background-color 0.2s, box-shadow 0.2s'
             }}
         >
+            {/* Holographic Spinning Rings */}
+            <div 
+                className="absolute inset-1 rounded-full border border-dashed pointer-events-none"
+                style={{ 
+                    borderColor: `rgba(${rgb}, 0.4)`,
+                    animation: `spin ${active ? '10s' : '30s'} linear infinite`
+                }}
+            />
+            <div 
+                className="absolute inset-3 rounded-full border border-dotted pointer-events-none"
+                style={{ 
+                    borderColor: `rgba(${rgb}, 0.2)`,
+                    animation: `spin ${active ? '15s' : '40s'} linear infinite reverse`
+                }}
+            />
+
+            {/* Tactical Crosshairs */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-50">
+                <div className="w-full h-[1px]" style={{ backgroundColor: `rgba(${rgb}, 0.3)` }}></div>
+                <div className="absolute h-full w-[1px]" style={{ backgroundColor: `rgba(${rgb}, 0.3)` }}></div>
+            </div>
+
+            {/* The Joystick Handle */}
             <div
-                className="rounded-full shadow-lg pointer-events-none"
+                className="rounded-full pointer-events-none absolute"
                 style={{
                     width: handleSize,
                     height: handleSize,
-                    backgroundColor: active ? color.replace('0.3', '0.8') : 'rgba(255,255,255,0.5)',
-                    transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
-                    transition: active ? 'none' : 'transform 0.1s ease-out, background-color 0.2s'
+                    backgroundColor: `rgba(${rgb}, ${active ? '0.4' : '0.1'})`,
+                    border: `2px solid rgba(${rgb}, ${active ? '0.8' : '0.4'})`,
+                    boxShadow: `0 0 15px rgba(${rgb}, 0.5)`,
+                    transform: `translate(${handlePos.x}px, ${handlePos.y}px) ${active ? 'scale(1.1)' : 'scale(1)'}`,
+                    transition: active ? 'transform 0.05s linear' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                 }}
-            />
+            >
+                 <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: `rgba(${rgb}, 0.8)` }}></div>
+                 </div>
+            </div>
         </div>
     );
 };

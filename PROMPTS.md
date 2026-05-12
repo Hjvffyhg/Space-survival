@@ -642,3 +642,85 @@ The bar utilizes an `(e.hp < e.maxHp || isActive) && e.hp > 0` condition to stri
 2. **Audio Pitch Shifting:** Injected varying `Math.random() * 0.2 - 0.1` pitch-shift interpolations into `audio.ts::playShoot` to defeat high-frequency fire rate ear fatigue.
 3. **Momentum Physics & Recoil:** Migrated the static ship velocity setter into an accelerating velocity accumulator tracking `state.player.vx/vy`. This enables smooth, zero-G feeling acceleration/deceleration. Firing heavy weapons now explicitly imparts opposing force vectors, simulating physical recoil weight.
 4. **Enemy Formations:** Modded the solo-spawn rate controller to roll a 25% chance of dropping a cluster of 2 to 4 enemies uniformly. This amplifies the need for the player's drones to prioritize clusters properly using CPU algorithms.
+
+## 95. Main Menu UI and Typography update
+> "1. Update src/index.css (The Typography)... 2. Update src/components/MainMenu.tsx (The UI Layout)"
+
+**Result:** Updated the global typography by replacing the `VT323` font with modern `Orbitron` and `Rajdhani` fonts in `src/index.css`. Reprogrammed `MainMenu.tsx` using an intricate combination of custom CSS `clip-path` (for high-tech angled corners), glassmorphism styles, hover scanline overlays, and responsive spacing. Integrated the provided background image seamlessly.
+
+## 96. High-Tech HUD Editor Transformation
+> "Awesome. Transforming the HUD editor to match this high-tech, cinematic aesthetic will make the entire experience feel much more cohesive... Here is the updated src/components/HudEditor.tsx"
+
+**Result:** Completely transformed `HudEditor.tsx` into a diegetic holographic interface:
+1. Replaced primitive CSS circles with sweeping `clip-path` hexagons, dash borders, and animate-spin decorators.
+2. Injected a tactical scanline and dot-matrix background projection across the editor.
+3. Enhanced the selected element panel with glowing neon typography, a functional D-pad for pixel-perfect nudging, and responsive opacity/scale sliders.
+
+## 97. In-Game Diegetic Holographic HUD
+> "To bring the epic, high-tech diegetic HUD from the Editor into the actual game, we need to update two files. First, we will completely rewrite the VirtualJoystick... Then, we will update the HTML UI overlays inside GameCanvas.tsx."
+
+**Result:** Synced the runtime UI aesthetic with the editor. Recreated `VirtualJoystick.tsx` implementing layered geometric designs including spinning dashed rings, an angled-cut interactive stick, outer crosshairs, and dynamic SVG glassmorphism. Stripped out all pixel art within `GameCanvas.tsx` UI overlays. Replaced the flat standard elements with complex, high-contrast holographic borders, `clip-path` cuts, and nested `Orbitron` numeric readouts for HP, EXP, Wave tracking, and CPU algorithm dashboards.
+
+## 98. Hangar and Sector Map overhauls
+> "."
+
+**Result:** Completely overhauled the `Shop.tsx` and `GalaxyModeSelect.tsx` to match the diegetic "Earth Defense Initiative" interface. Transformed the shop into a Prototype Hangar Bay and the Galaxy Mode select into a Tactical Starchart, utilizing CSS clipping paths and complex translucent overlay gradients.
+
+## 99. System Settings Databank Overhaul
+> "also the system settings"
+
+**Result:** Reimagined the game's `Report.tsx` (now System Settings) component to align perfectly with the "Earth Defense Initiative" high-tech cinematic aesthetic. Reprogrammed the UI with custom CSS `clip-path` geometry, responsive data grids, background holographic grids, glowing neon borders, and `font-mono` typography, turning a standard tech-doc into a diegetic Archive Settings Terminal.
+
+## 100. High-Res Procedural Planets and Nebulas
+> "The Procedural Backgrounds (Planets & Nebulas): Right now, src/lib/proceduralGraphics.ts is generating retro, 32x32 chunky pixel-art planets. This completely clashes with your sleek new UI... Let's start by upgrading the actual environment you fly through. 1. Upgrade src/lib/proceduralGraphics.ts 2. A vital CSS fix (src/index.css)"
+
+**Result:** Completely rewrote `proceduralGraphics.ts` to output high-resolution `Canvas` spheres featuring atmospheric glowing radial gradients, 3D shadowed highlighting, and tech-styled orbital rings. Removed `canvas` from the `pixelated` CSS rule in `index.css` to allow these procedurally generated celestial bodies to render smoothly.
+
+## 102. Responsive HUD and Main Menu Overhaul
+> "Here's the issue: adjust the display on every device to make sure it fits." (Provided screenshots displaying HUD element overlaps and cropped Main Menu on some screens)
+
+**Result:** Made structural adjustments to the layouts using Tailwind's responsive paradigms. 
+1. Fixed `MainMenu.tsx` by replacing strict layout constraints with adaptive margins responsive to screen heights (`h-full overflow-y-auto` added) and safely packing Title and Buttons so they don't get cut off on landscape/small devices.
+2. Repaired `GameCanvas.tsx` HUD where `flex-shrink` was squishing action buttons (Munitions, Dash, Shield). By adding `w-max max-w-[95vw]` with `shrink-0` definitions on the DOM elements, coupled with `lg:`/`md:` specific size overrides and a generic scale transform base factor, the bottom command bar now smoothly resizes down without clipping or overlapping bounds.
+
+## 103. Main Menu Scrollbar Fix
+> "There is a slider at the right corner, fix that on every device"
+
+**Result:** Prevented the unsightly scrollbar track from rendering on the Main Menu and other UI screens. Replaced `custom-scrollbar` with Tailwind's hidden scrollbar utilities (`[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`) on the `MainMenu.tsx` container, and also globally updated `.custom-scrollbar` in `index.css` to have a transparent track so subsequent menus don't have ugly track bars.
+
+## 104. HUD Labeling and Wave Notification Centering
+> "fix the area I encircle, the wave notif/warning must be at the center, next is the label, and the size"
+
+**Result:** 
+1. Fixed the `WAVE ... SYSTEM UPDATE` notification to perfectly horizontally and vertically center by spanning the full-width with `left-0 right-0` rather than relying on left offsets, allowing flexbox text centering to guarantee it stays dead-center in the viewport. Also bumped up its text sizes for better emphasis.
+2. Formatted the `MUNITIONS` HUD value using `Math.floor()` to prevent floating point unconstrained widths when generating long decimal ammo values.
+3. Added missing "KIN" and "PLS" (Kinetic and Plasma) label wrappers for the left-side weapon ability octagons. 
+4. Adjusted the visual stack of the right-side skill octagons (Dash and Shield) so their baseline labels remain visible, positioning any floating point cooldown numbers into a translucent backdrop blur overlay `span` instead of replacing the button string directly.
+
+## 105. Main Menu Scrolling and HUD Button Labels
+> "Make the main menu like this no more scrolling, and the label also inside the game its a bit awkw,ard add some border and size, because it's not visible"
+
+**Result:**
+1. **Main Menu Structure:** Locked the `MainMenu.tsx` wrapper to strictly `overflow-hidden` rather than allowing vertical scrolling, ensuring the Title text block and the stacked Command Menu buttons fit strictly into the screen metrics. Tweaked `mt-` and `py-` margins on the title grouping so that the menu components scale down to fit smaller portrait/landscape bounds precisely.
+2. **HUD Button Labels:** Targeted the action box renders inside `GameCanvas.tsx`. `KIN`, `PLS`, `DASH` (renamed from BOOST so it fits symmetrically), and `SHD` tags are now structured as self-contained "stickers" (`px-1.5 py-0.5 border-t border-b bg-...-950/80 drop-shadow-lg`), adding the requested font-weight bumps and opaque background borders to dramatically improve contrast against the varying background states.
+
+## 106. Universal UI Adjustable Scaling
+> "make ui adjustable based on what resolution the player has"
+
+**Result:** Implemented a unified `uiScale` mathematical factor across the primary user interfaces to guarantee perfect proportional fitting across all screen resolutions without relying on breakpoint media query jumping.
+1. In `GameCanvas.tsx`, defined a generic base desktop resolution (`1440x900`). A `ResizeObserver` listener computes an active multiplier (`0.6` to `1.2`) which is injected into the absolute overlay components (`scale(${uiScale})`), gracefully shrinking the top quadrants, bottom abilities HUD, and Wave Boss notifications exactly matching the viewport ratio.
+2. Replicated this dynamic scaling algorithm inside `MainMenu.tsx` with `transformOrigin: left` so the typography and interactive menu buttons shrink dynamically to keep them constrained without breaking out of their container on low-height devices.
+
+## 107. Lead UI Designer Critique & Immersive Additions
+> "Act as the game ui designer and critique this work"
+
+**Critique & Actions Taken:**
+As a Lead UI Designer evaluating the "Earth Defense Initiative", here is my breakdown:
+- **Typography & Hierarchy (Excellent):** The Mono/Sans pairing and wide-tracking (`tracking-widest`) are perfect for the telemetry feeling. We just refined spacing in prior iterations.
+- **Layout Affordance (Solid):** The 4-corner HUD architecture works incredibly well on scaling dimensions. 
+- **Visual Feedback & "Juice" (Lacking):** A sci-fi interface often feels "flat" without subtle screen noise or severe state-changes during high tension sequences. Action blocks rely too heavily on reading tiny "NO STM" text strings or numerical bars in peripheral vision instead of structural flashes.
+
+**Resulting Design Implementation:**
+1. **Critical Health Vignette:** Added a full-viewport radial red vignette (`critVignetteRef`) that hooks into the HP state. When Hull drops below 25%, the screen dynamically pulses a red border using a `Math.sin` time function.
+2. **Action State Desaturation/Flashing:** Refactored the `DASH` and `SHD` (Shield) HUD action buttons. If a player tries to use them or stares at them while Stamina is empty, the buttons physically grayscale, pulse red, and swap their borders using `animate-pulse`, completely removing the cognitive load of having to read "NO STM" during a firefight.
+3. **Immersive CRT Scanlines:** Injected a global `mix-blend-overlay` procedural CSS background using `linear-gradient` interlaced structures across the `GameCanvas` layer to simulate physical tactical monitor lines.

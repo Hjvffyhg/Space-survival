@@ -168,14 +168,8 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <div className="h-full w-full relative">
-                <button 
-                  onClick={backToMenu}
-                  className="absolute top-6 left-6 z-50 flex items-center gap-2 p-3 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shadow-lg"
-                >
-                  <ArrowLeft size={18} /> Back to Menu
-                </button>
-                <Report />
+              <div className="h-full w-full relative bg-[#020617]">
+                <Report onBack={backToMenu} />
               </div>
             )}
           </motion.div>

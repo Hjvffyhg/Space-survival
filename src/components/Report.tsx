@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, BrainCircuit, Activity, Layers, Code2, BarChart2, CheckCircle2, Sliders, Target, Play, LineChart, Zap } from 'lucide-react';
+import { LayoutDashboard, BrainCircuit, Activity, Layers, Code2, BarChart2, CheckCircle2, Sliders, Target, Play, LineChart, Zap, ArrowLeft, Terminal, Server, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Mermaid } from './Mermaid';
 
@@ -12,57 +12,118 @@ const TABS = [
   { id: 'implementation', icon: Code2, label: 'Implementation' },
   { id: 'balancing', icon: Sliders, label: 'Mechanics & Balancing' },
   { id: 'guidelines', icon: BarChart2, label: 'Balancing Guidelines' },
-  { id: 'mixing', icon: BrainCircuit, label: 'Mixing Patterns' },
+  { id: 'mixing', icon: Server, label: 'Mixing Patterns' },
   { id: 'scenarios', icon: Play, label: 'Sample Scenarios' },
   { id: 'metrics', icon: LineChart, label: 'Playtesting Metrics' },
-  { id: 'performance', icon: Zap, label: 'Optimization' },
+  { id: 'performance', icon: Cpu, label: 'Optimization' },
 ];
 
-export function Report() {
+export function Report({ onBack }: { onBack?: () => void }) {
   const [activeTab, setActiveTab] = useState('summary');
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-      {/* Sidebar Content Menu */}
-      <div className="w-full md:w-64 bg-slate-950/50 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col p-2 md:p-4 shrink-0 overflow-x-auto md:overflow-y-auto custom-scrollbar">
-         <h2 className="hidden md:block text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 px-2">Table of Contents</h2>
-         <nav className="flex flex-row md:flex-col gap-2 md:gap-1 w-max md:w-auto">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "flex items-center gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all duration-200 relative text-left whitespace-nowrap",
-                    isActive 
-                      ? "text-white bg-slate-800 shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-                  )}
-                >
-                  <Icon size={16} className={cn("transition-colors shrink-0", isActive ? "text-indigo-400" : "text-slate-500")} />
-                  <span className="flex-1 truncate">{tab.label}</span>
-                </button>
-              );
-            })}
-         </nav>
+    <div className="absolute inset-0 w-full h-full bg-[#020617] overflow-hidden flex flex-col font-sans">
+      {/* Background Grid */}
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(6,182,212,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.2)_1px,transparent_1px)] bg-[size:40px_40px] z-0"></div>
+      <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(circle_at_center,_transparent_0%,_#020617_100%)] z-0"></div>
+
+      {/* Header Area */}
+      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end p-6 md:p-8 md:pt-12 border-b border-cyan-900/50 bg-slate-950/80 backdrop-blur-md shadow-[0_10px_30px_rgba(6,182,212,0.05)]">
+        <div className="flex flex-col gap-4">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-cyan-900/50 hover:border-cyan-500 text-cyan-500 hover:text-cyan-300 transition-all font-mono text-xs tracking-widest uppercase w-max"
+              style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0% 100%)' }}
+            >
+              <ArrowLeft size={14} /> Command Interface
+            </button>
+          )}
+          
+          <div>
+            <div className="flex items-center gap-3">
+              <Terminal className="text-cyan-400 shrink-0" size={32} />
+              <h1 className="text-3xl md:text-5xl font-black text-white tracking-[0.2em] uppercase font-mono drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                SYSTEM SETTINGS & LOGS
+              </h1>
+            </div>
+            <p className="text-cyan-500/70 font-mono text-sm tracking-widest mt-1 md:ml-[44px]">EARTH DEFENSE INITIATIVE // DATABANK ARCHIVE</p>
+          </div>
+        </div>
       </div>
 
-      {/* Main Report Content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-12 scroll-smooth">
-         <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="max-w-4xl mx-auto"
-            >
-              <Content tab={activeTab} />
-            </motion.div>
-          </AnimatePresence>
+      <div className="relative z-10 flex flex-col md:flex-row flex-1 min-h-0">
+        {/* Sidebar Content Menu */}
+        <div className="w-full md:w-80 bg-slate-950/80 border-b md:border-b-0 md:border-r border-cyan-900/50 flex flex-col p-4 md:p-6 shrink-0 overflow-x-auto md:overflow-y-auto custom-scrollbar backdrop-blur-sm relative">
+           <div className="absolute top-0 right-0 w-8 h-8 bg-cyan-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+           <h2 className="hidden md:block text-[10px] font-bold text-cyan-500 uppercase tracking-widest mb-6 px-2 border-b border-slate-800 pb-2">Archive Index</h2>
+           <nav className="flex flex-row md:flex-col gap-2 md:gap-3 w-max md:w-auto">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{ clipPath: 'polygon(0 0, 95% 0, 100% 50%, 95% 100%, 0 100%)' }}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 text-[10px] md:text-xs font-mono font-bold tracking-widest transition-all duration-300 relative text-left whitespace-nowrap uppercase border",
+                      isActive 
+                        ? "text-cyan-100 bg-cyan-950/50 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                        : "text-slate-500 bg-slate-900/50 border-slate-800/80 hover:text-cyan-400 hover:border-cyan-900/50"
+                    )}
+                  >
+                    <Icon size={16} className={cn("transition-colors shrink-0", isActive ? "text-cyan-400" : "text-slate-600")} />
+                    <span className="flex-1 truncate mt-0.5">{tab.label}</span>
+                  </button>
+                );
+              })}
+           </nav>
+        </div>
+
+        {/* Main Report Content */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-12 scroll-smooth custom-scrollbar">
+           <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, scale: 0.98, filter: 'blur(5px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.98, filter: 'blur(5px)' }}
+                transition={{ duration: 0.3 }}
+                className="max-w-4xl mx-auto"
+              >
+                <Content tab={activeTab} />
+              </motion.div>
+            </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Reusable Heading Component
+function SectionHeading({ title, subtitle }: { title: string, subtitle?: string }) {
+   return (
+      <div className="space-y-2 border-b border-cyan-900/50 pb-4 mb-8">
+        <h2 className="text-2xl md:text-3xl font-mono font-black tracking-widest text-white uppercase drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">{title}</h2>
+        {subtitle && <p className="text-cyan-500/70 font-mono text-xs tracking-widest uppercase mt-2">{subtitle}</p>}
+      </div>
+   );
+}
+
+// Helper Container for Content sections
+function ContentBox({ title, icon: Icon, children, borderColor = "border-slate-700/50" }: any) {
+  return (
+    <div className={cn("bg-slate-900/60 p-6 md:p-8 border backdrop-blur-sm relative", borderColor)} style={{ clipPath: 'polygon(0 0, 97% 0, 100% 7%, 100% 100%, 3% 100%, 0 93%)' }}>
+      <div className="absolute top-0 right-0 w-8 h-8 bg-current opacity-10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+      {title && (
+         <h3 className="text-lg md:text-xl font-mono font-bold flex items-center gap-4 text-white mb-6 uppercase tracking-widest border-b border-slate-800 pb-4">
+          {Icon && <span className="text-cyan-400"><Icon size={20} /></span>}
+          {title}
+        </h3>
+      )}
+      <div className="font-mono text-slate-300 text-xs md:text-sm leading-relaxed">
+        {children}
       </div>
     </div>
   );
@@ -85,94 +146,31 @@ function Content({ tab }: { tab: string }) {
   }
 }
 
-function Implementation() {
-  return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Spawning & Attack Implementation</h2>
-        <p className="text-slate-400">Technical insights into the queue mechanics and execution time-slicing.</p>
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-indigo-500/20 text-indigo-400 p-2 rounded-lg"><Activity size={20} /></span>
-            Spawning Mechanics
-          </h3>
-          <p className="text-slate-300 mb-4 leading-relaxed font-light">
-            Use a queue for new spawn events. When a spawn is ready, it is added to the queue with a timestamp.
-          </p>
-          <ul className="space-y-3 text-slate-300">
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div><strong>FCFS:</strong> Always dequeue the oldest spawn. Simple timestamp resolution.</div></li>
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div><strong>Round-Robin / HRRN:</strong> Cycle through valid spawn points or apply HRRN logic to pick which spawn location activates next (e.g. prioritize locations waiting the longest, or those slated for swifter, weaker enemies).</div></li>
-          </ul>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-rose-500/20 text-rose-400 p-2 rounded-lg"><Target size={20} /></span>
-            Targeting & Action Slicing
-          </h3>
-          <p className="text-slate-300 mb-4 leading-relaxed font-light">
-            Each enemy operates as a State Machine (Idle, Move, Attack, Cooldown). The CPU scheduler dictates which enemy state machine advances per tick:
-          </p>
-          
-          <div className="space-y-4">
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex gap-4 items-start">
-               <div className="bg-slate-800 text-slate-400 font-mono text-sm w-6 h-6 flex items-center justify-center rounded-md shrink-0">1</div>
-               <p className="text-sm text-slate-300 pt-0.5">Gather all active enemies (e.g., spawned and not dead).</p>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex gap-4 items-start">
-               <div className="bg-slate-800 text-slate-400 font-mono text-sm w-6 h-6 flex items-center justify-center rounded-md shrink-0">2</div>
-               <p className="text-sm text-slate-300 pt-0.5">The Scheduler picks enemies to "update" this frame based on the active strategy (FCFS: first in list; RR: next in round; HRRN: highest ratio).</p>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex gap-4 items-start">
-               <div className="bg-slate-800 text-slate-400 font-mono text-sm w-6 h-6 flex items-center justify-center rounded-md shrink-0">3</div>
-               <p className="text-sm text-slate-300 pt-0.5">Selected enemies execute their AI action (move or attack) for a fixed action interval (1 frame or short duration). Unselected enemies wait or play idle animations, simulating time-slicing.</p>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex gap-4 items-start">
-               <div className="bg-slate-800 text-slate-400 font-mono text-sm w-6 h-6 flex items-center justify-center rounded-md shrink-0">4</div>
-               <p className="text-sm text-slate-300 pt-0.5">Loop the cycle each frame. To simulate multiple processors grouping the scheduling into sub-steps (or assigning multiple "Cores") allows multiple enemies to act simultaneously within the frame.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ExecutiveSummary() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Executive Summary</h2>
-        <p className="text-lg text-slate-400 leading-relaxed font-light">
-          Applying CPU scheduling paradigms to 2D survival AI architecture.
+      <SectionHeading title="Executive Summary" subtitle="Applying CPU scheduling paradigms to 2D survival AI architecture." />
+      <ContentBox borderColor="border-cyan-500/30" icon={LayoutDashboard} title="Overview">
+        <p className="mb-6">
+          In a 2D survival game, enemy behavior can be driven by classic CPU scheduling strategies. 
+          By treating enemy actions (spawn, pathfinding, attack) as processes, we can map 
+          <strong className="text-cyan-400"> FCFS</strong>, <strong className="text-cyan-400"> RR</strong>, and <strong className="text-cyan-400"> HRRN</strong> to dictate enemy order and cadence.
         </p>
-      </div>
-      <div className="prose prose-invert prose-slate max-w-none">
-        <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 text-slate-300">
-          <p>
-            In a 2D survival game, enemy behavior can be driven by classic CPU scheduling strategies. 
-            By treating enemy actions (spawn, pathfinding, attack) as processes, we can map 
-            <strong className="text-white"> FCFS</strong>, <strong className="text-white"> RR</strong>, and <strong className="text-white"> HRRN</strong> to dictate enemy order and cadence.
-          </p>
-          <ul className="space-y-4 text-slate-300 mt-4 pl-0 list-none">
-            <li className="flex gap-3 items-start">
-              <CheckCircle2 className="mt-1 shrink-0 text-amber-400" size={18} />
-              <div><strong className="text-white block">FCFS</strong> Spawns and executes behaviors in strict arrival order. Simple but can lead to convoys blocking action.</div>
-            </li>
-            <li className="flex gap-3 items-start">
-               <CheckCircle2 className="mt-1 shrink-0 text-emerald-400" size={18} />
-              <div><strong className="text-white block">Round-Robin (RR)</strong> Assigns a strict time-slice. Ensures fair distribution and high responsiveness.</div>
-            </li>
-            <li className="flex gap-3 items-start">
-               <CheckCircle2 className="mt-1 shrink-0 text-indigo-400" size={18} />
-              <div><strong className="text-white block">HRRN</strong> Balances starvation and threat by dynamic prioritization. Yields smart tactical AI.</div>
-            </li>
-          </ul>
-        </div>
-      </div>
+        <ul className="space-y-4 list-none p-0">
+          <li className="flex gap-4 items-start p-4 bg-slate-950/50 border border-slate-800">
+            <CheckCircle2 className="mt-0.5 shrink-0 text-amber-500" size={16} />
+            <div><strong className="text-amber-400 block mb-1 uppercase tracking-widest text-[10px]">FCFS</strong> Spawns and executes behaviors in strict arrival order. Simple but can lead to convoys blocking action.</div>
+          </li>
+          <li className="flex gap-4 items-start p-4 bg-slate-950/50 border border-slate-800">
+             <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-500" size={16} />
+            <div><strong className="text-emerald-400 block mb-1 uppercase tracking-widest text-[10px]">Round-Robin (RR)</strong> Assigns a strict time-slice. Ensures fair distribution and high responsiveness.</div>
+          </li>
+          <li className="flex gap-4 items-start p-4 bg-slate-950/50 border border-slate-800">
+             <CheckCircle2 className="mt-0.5 shrink-0 text-indigo-500" size={16} />
+            <div><strong className="text-indigo-400 block mb-1 uppercase tracking-widest text-[10px]">HRRN</strong> Balances starvation and threat by dynamic prioritization. Yields smart tactical AI.</div>
+          </li>
+        </ul>
+      </ContentBox>
     </div>
   );
 }
@@ -180,24 +178,24 @@ function ExecutiveSummary() {
 function Strategies() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Core Algorithms</h2>
-        <p className="text-slate-400">Deep dive into CPU scheduling translates.</p>
-      </div>
-      {/* Snipped for brevity, reuse similar logic */}
+      <SectionHeading title="Core Algorithms" subtitle="Deep dive into CPU scheduling translates." />
+      
       <div className="grid gap-6">
-        <div className="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/5">
-          <h3 className="text-xl font-semibold text-rose-400 mb-2">FCFS (First-Come, First-Served)</h3>
-          <p className="text-slate-300">Enemies are placed in a FIFO queue. The entity at the front finishes its entire attack cycle before yielding. Simple, but prone to blockage if animations are long.</p>
-        </div>
-        <div className="p-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5">
-          <h3 className="text-xl font-semibold text-emerald-400 mb-2">Round-Robin (RR)</h3>
-          <p className="text-slate-300">Every enemy receives a small time 'quantum'. Ensures fair flow and simultaneous swarm advancement, but adds state-switching overhead.</p>
-        </div>
-        <div className="p-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/5">
-          <h3 className="text-xl font-semibold text-indigo-400 mb-2">Highest-Response-Ratio-Next (HRRN)</h3>
-          <p className="text-slate-300">Sorts execution by dynamic priority: <code>R = (Wait Time + Service Time) / Service Time</code>. Solves starvation while respecting enemy threat values.</p>
-        </div>
+        <ContentBox borderColor="border-amber-500/30" title="FCFS (First-Come, First-Served)">
+          <div className="absolute top-0 right-0 w-8 h-8 bg-amber-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="text-amber-100/70">Enemies are placed in a FIFO queue. The entity at the front finishes its entire attack cycle before yielding. Simple, but prone to blockage if animations are long.</p>
+        </ContentBox>
+        <ContentBox borderColor="border-emerald-500/30" title="Round-Robin (RR)">
+           <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="text-emerald-100/70">Every enemy receives a small time 'quantum'. Ensures fair flow and simultaneous swarm advancement, but adds state-switching overhead.</p>
+        </ContentBox>
+        <ContentBox borderColor="border-indigo-500/30" title="Highest-Response-Ratio-Next (HRRN)">
+           <div className="absolute top-0 right-0 w-8 h-8 bg-indigo-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="text-indigo-100/70 mb-4">Sorts execution by dynamic priority. Solves starvation while respecting enemy threat values.</p>
+          <div className="p-3 bg-indigo-950/30 border border-indigo-500/30 font-mono text-indigo-300 text-center uppercase tracking-widest text-xs">
+              R = (Wait Time + Service Time) / Service Time
+          </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -206,9 +204,7 @@ function Strategies() {
 function ConceptualMapping() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Conceptual Mapping</h2>
-      </div>
+      <SectionHeading title="Conceptual Mapping" />
       <div className="space-y-6">
         <FeatureCard 
           title="Enemy Spawn Scheduling"
@@ -235,12 +231,12 @@ function ConceptualMapping() {
 
 function FeatureCard({title, fcfs, rr, hrrn}: any) {
   return (
-    <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-5">
-      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-300">
-        <div><strong className="text-rose-400 block mb-1">FCFS:</strong>{fcfs}</div>
-        <div><strong className="text-emerald-400 block mb-1">RR:</strong>{rr}</div>
-        <div><strong className="text-indigo-400 block mb-1">HRRN:</strong>{hrrn}</div>
+    <div className="bg-slate-900/60 border border-slate-700/50 p-6 relative" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 95% 100%, 0 100%)' }}>
+      <h3 className="text-base font-bold text-white mb-6 uppercase tracking-widest font-mono border-b border-slate-800 pb-2">{title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-400 font-mono">
+        <div className="p-4 bg-slate-950/50 border border-amber-900/30"><strong className="text-amber-500 block mb-2 tracking-widest">FCFS</strong>{fcfs}</div>
+        <div className="p-4 bg-slate-950/50 border border-emerald-900/30"><strong className="text-emerald-500 block mb-2 tracking-widest">RR</strong>{rr}</div>
+        <div className="p-4 bg-slate-950/50 border border-indigo-900/30"><strong className="text-indigo-500 block mb-2 tracking-widest">HRRN</strong>{hrrn}</div>
       </div>
     </div>
   );
@@ -249,9 +245,9 @@ function FeatureCard({title, fcfs, rr, hrrn}: any) {
 function Architecture() {
   const chart = `
   flowchart TD
-      classDef default fill:#0f172a,stroke:#334155,stroke-width:2px,color:#f8fafc;
-      classDef active fill:#312e81,stroke:#6366f1,stroke-width:2px,color:#f8fafc;
-      classDef action fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+      classDef default fill:#0f172a,stroke:#22d3ee,stroke-width:1px,color:#f8fafc;
+      classDef active fill:#082f49,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+      classDef action fill:#064e3b,stroke:#a7f3d0,stroke-width:2px,color:#f8fafc;
       S[Enemy Spawn Event] --> Q[(AI Scheduler Queue)]
       Q --> Eval{Evaluate Strategy}
       Eval -- FCFS --> P_FCFS[Pop Front Enemy]
@@ -267,11 +263,49 @@ function Architecture() {
   `;
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Scheduler Flowchart</h2>
-      </div>
-      <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 overflow-hidden">
-        <Mermaid chart={chart} />
+      <SectionHeading title="Architecture Model" subtitle="Scheduler Flowchart Representation" />
+      <ContentBox borderColor="border-cyan-500/50">
+        <div className="overflow-hidden mix-blend-screen opacity-90">
+          <Mermaid chart={chart} />
+        </div>
+      </ContentBox>
+    </div>
+  );
+}
+
+function Implementation() {
+  return (
+    <div className="space-y-8">
+      <SectionHeading title="Spawning & Attack Implementation" subtitle="Technical insights into the queue mechanics and execution time-slicing." />
+
+      <div className="space-y-6">
+        <ContentBox title="Spawning Mechanics" icon={Activity} borderColor="border-indigo-500/30">
+          <div className="absolute top-0 right-0 w-8 h-8 bg-indigo-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="mb-4 text-indigo-100/70">Use a queue for new spawn events. When a spawn is ready, it is added to the queue with a timestamp.</p>
+          <ul className="space-y-4">
+             <li className="flex gap-4 p-4 border border-indigo-900/30 bg-indigo-950/20"><div className="w-2 h-2 rounded-none bg-indigo-500 mt-1.5 shrink-0" /><div><strong className="text-indigo-400">FCFS:</strong> Always dequeue the oldest spawn. Simple timestamp resolution.</div></li>
+             <li className="flex gap-4 p-4 border border-indigo-900/30 bg-indigo-950/20"><div className="w-2 h-2 rounded-none bg-indigo-500 mt-1.5 shrink-0" /><div><strong className="text-indigo-400">Round-Robin / HRRN:</strong> Cycle through valid spawn points or apply HRRN logic to pick which spawn location activates next.</div></li>
+          </ul>
+        </ContentBox>
+
+        <ContentBox title="Targeting & Action Slicing" icon={Target} borderColor="border-rose-500/30">
+          <div className="absolute top-0 right-0 w-8 h-8 bg-rose-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="mb-4 text-rose-100/70">Each enemy operates as a State Machine (Idle, Move, Attack, Cooldown). The CPU scheduler dictates which enemy advances per tick:</p>
+          <div className="space-y-3">
+            {[ 
+               "Gather all active enemies (e.g., spawned and not dead).",
+               "The Scheduler picks enemies to update this frame based on the active strategy.",
+               "Selected enemies execute their AI action for a fixed action interval.",
+               "Loop the cycle each frame. Emulates multi-core processing limits."
+            ].map((text, i) => (
+               <div key={i} className="bg-slate-950 border border-slate-800 p-4 flex gap-4 items-start relative">
+                 <div className="absolute top-0 left-0 w-1 h-full bg-rose-500/50"></div>
+                 <div className="text-rose-500 font-mono font-black text-lg w-6 shrink-0 text-center">0{i+1}</div>
+                 <p className="text-slate-400 pt-0.5">{text}</p>
+               </div>
+            ))}
+          </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -279,83 +313,65 @@ function Architecture() {
 
 function Balancing() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Concrete Mechanics & Balancing</h2>
-        <p className="text-slate-400">Example parameters and formulas for live deployment.</p>
-      </div>
+    <div className="space-y-8 border-b border-transparent">
+      <SectionHeading title="Concrete Mechanics & Balancing" subtitle="Logic parameters and formulas for live deployment." />
 
-      <div className="space-y-6 text-slate-300 leading-relaxed font-light text-[15px]">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-             <div className="w-2 h-2 rounded-full bg-sky-400" /> Spawn Rates
-          </h3>
-          <p>
-            Set a base spawn interval or wave delay <code className="bg-slate-800 px-1 py-0.5 rounded text-sky-300">T</code>. FCFS mode (easy) <code className="bg-slate-800 px-1 py-0.5 rounded text-sky-300">T=4s</code>, RR mode (normal) <code className="bg-slate-800 px-1 py-0.5 rounded text-sky-300">T=3s</code>, HRRN mode (hard) <code className="bg-slate-800 px-1 py-0.5 rounded text-sky-300">T=2s</code>.
+      <div className="space-y-6">
+        <ContentBox title="Spawn Rates" borderColor="border-sky-500/30">
+          <div className="absolute top-0 right-0 w-8 h-8 bg-sky-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="text-sky-100/80">
+            Set a base spawn interval or wave delay <code className="bg-sky-950 border border-sky-800 px-2 py-0.5 text-sky-400">T</code>. FCFS mode (easy) <code className="bg-sky-950 border border-sky-800 px-2 py-0.5 text-sky-400">T=4s</code>, RR mode (normal) <code className="bg-sky-950 border border-sky-800 px-2 py-0.5 text-sky-400">T=3s</code>, HRRN mode (hard) <code className="bg-sky-950 border border-sky-800 px-2 py-0.5 text-sky-400">T=2s</code>.
           </p>
-        </div>
+        </ContentBox>
 
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400" /> Time Quantum (RR)
-          </h3>
-          <p>
-            If using Round-Robin, pick a quantum. E.g. <code className="bg-slate-800 px-1 py-0.5 rounded text-emerald-300">0.5s</code> per enemy turn. A larger quantum makes enemies finish attacks uninterrupted; a very small quantum (0.1s) means highly interleaved and chaotic. Prototype value: 0.5s – 1.0s.
+        <ContentBox title="Time Quantum (RR)" borderColor="border-emerald-500/30">
+           <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="text-emerald-100/80">
+            If using Round-Robin, pick a quantum. E.g. <code className="bg-emerald-950 border border-emerald-800 px-2 py-0.5 text-emerald-400">0.5s</code> per enemy turn. A larger quantum makes enemies finish attacks uninterrupted; a very small quantum means highly interleaved chaos.
           </p>
-        </div>
+        </ContentBox>
 
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-indigo-400" /> HRRN Priority & Threat Score
-          </h3>
-          <p className="mb-3">
-            ResponseRatio = <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">(W + S) / S</code>. Where W is Wait Time, and S is Service Time / Threat Measure.
+        <ContentBox title="HRRN Priority & Threat Score" borderColor="border-indigo-500/30">
+           <div className="absolute top-0 right-0 w-8 h-8 bg-indigo-500/10" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+          <p className="mb-4 text-indigo-100/80">
+            ResponseRatio = <code className="bg-indigo-950 border border-indigo-800 px-2 py-0.5 text-indigo-400">(W + S) / S</code>. W is Wait Time, S is Service Time (Threat Measure).
           </p>
-          <p className="mb-3">
-            Assign base threat to enemy types: Fast weak enemy (Goblin) <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">S=1</code>, slow tough enemy (Boss) <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">S=5</code>. The formula favors weaker enemies that waited interrupting occasionally.
-          </p>
-          <p className="text-sm text-indigo-300 bg-indigo-500/10 p-3 rounded-lg border border-indigo-500/20">
+          <div className="bg-indigo-950/50 p-4 border border-indigo-500/20 text-indigo-300">
             <strong>Example:</strong> Enemy A has W=10s, S=2s → R=6.0. Enemy B has W=2s, S=1s → R=3.0. Enemy A acts first.
-          </p>
-        </div>
+          </div>
+        </ContentBox>
       </div>
 
-      <div className="pt-4">
-        <h3 className="text-xl font-semibold tracking-tight text-white mb-4">Sample Parameter Table (Prototype)</h3>
-        <div className="bg-slate-950/50 rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-xs">
+      <div className="pt-8">
+        <h3 className="text-lg font-mono font-bold tracking-widest text-white mb-4 uppercase">Parameter Table Matrix</h3>
+        <div className="bg-slate-900/80 border border-cyan-900/50 overflow-hidden font-mono text-xs">
+          <table className="w-full text-left">
+            <thead className="bg-slate-950 text-slate-500 uppercase tracking-widest">
               <tr>
-                <th className="px-6 py-4 font-semibold">Parameter</th>
-                <th className="px-6 py-4 font-semibold text-rose-400">Easy (FCFS)</th>
-                <th className="px-6 py-4 font-semibold text-emerald-400">Normal (RR)</th>
-                <th className="px-6 py-4 font-semibold text-indigo-400">Hard (HRRN)</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-800">Parameter</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-800 text-amber-500">FCFS</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-800 text-emerald-500">RR</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-800 text-indigo-500">HRRN</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 text-slate-300">
+            <tbody className="divide-y divide-slate-800/50 text-slate-300">
               <tr className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 font-medium text-white">Spawn Interval</td>
+                <td className="px-6 py-4 text-white">Spawn Interval</td>
                 <td className="px-6 py-4">4.0 s</td>
                 <td className="px-6 py-4">3.0 s</td>
                 <td className="px-6 py-4">2.0 s</td>
               </tr>
               <tr className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 font-medium text-white">RR Quantum</td>
-                <td className="px-6 py-4 text-slate-500">N/A</td>
+                <td className="px-6 py-4 text-white">RR Quantum</td>
+                <td className="px-6 py-4 text-slate-600">N/A</td>
                 <td className="px-6 py-4">0.5 s</td>
-                <td className="px-6 py-4 text-slate-500">N/A</td>
+                <td className="px-6 py-4 text-slate-600">N/A</td>
               </tr>
               <tr className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 font-medium text-white">Threat (Service Time)</td>
-                <td className="px-6 py-4">Uniform 1.0</td>
-                <td className="px-6 py-4">Uniform 1.0</td>
-                <td className="px-6 py-4 leading-relaxed">Goblin=1.0<br/>Ogre=3.0<br/>Boss=5.0</td>
-              </tr>
-              <tr className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 font-medium text-white">Initial Priority</td>
-                <td className="px-6 py-4">FCFS queue order</td>
-                <td className="px-6 py-4">RR queue order</td>
-                <td className="px-6 py-4">Compute via (W+S)/S</td>
+                <td className="px-6 py-4 text-white">Initial Priority</td>
+                <td className="px-6 py-4">FCFS queue</td>
+                <td className="px-6 py-4">RR queue</td>
+                <td className="px-6 py-4">Ratio Compute</td>
               </tr>
             </tbody>
           </table>
@@ -368,63 +384,26 @@ function Balancing() {
 function Guidelines() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Balancing Guidelines</h2>
-        <p className="text-slate-400">Heuristics for creating fair, challenging, and tactical AI flow.</p>
-      </div>
+      <SectionHeading title="Balancing Guidelines" subtitle="Heuristics for creating fair, challenging, and tactical AI flow." />
 
       <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             <span className="bg-sky-500/20 text-sky-400 p-2 rounded-lg"><Activity size={20} /></span>
-             Difficulty Curve
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed mb-4">
-             Scheduling directly affects perceived difficulty. Use retention/completion as indicators: if many players quit at a spawn wave, the scheduling might be too punishing. If players breeze through, the algorithm may be too lenient.
-          </p>
-          <ul className="space-y-3 text-slate-300 text-sm">
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div><strong>FCFS:</strong> Tends to create bursts (one enemy hogging time), which can spike difficulty unpredictably.</div></li>
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div><strong>Round-Robin:</strong> Distributes threat evenly, making a smoother and more consistent challenge.</div></li>
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div><strong>HRRN:</strong> Adapts dynamically. Low-level enemies that waited long suddenly swarm, which players may find highly tactical.</div></li>
-          </ul>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             <span className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg"><CheckCircle2 size={20} /></span>
-             Fairness & Perceived Intelligence
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed mb-4">
-             In game AI, fairness means not letting one enemy dominate unless intended. Players perceive HRRN-controlled enemies as more "intelligent" because the AI seems to adapt—for example, a wounded enemy suddenly gets its turn (similar to an “aggro” mechanic).
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <strong className="text-rose-400 block mb-2">FCFS</strong>
-                <span className="text-sm text-slate-400">Can feel unfair if one target dominates and blocks others.</span>
+        <ContentBox title="Fairness & Perceived Intelligence" icon={CheckCircle2} borderColor="border-emerald-500/30">
+          <p className="mb-6 text-emerald-100/70">Fairness means not letting one enemy dominate unless intended. HRRN-controlled enemies seem more "intelligent" because they adapt.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+             <div className="bg-slate-950/50 border border-slate-800 p-4 text-center" style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0 100%)' }}>
+                <strong className="text-amber-500 block mb-2 uppercase tracking-widest">FCFS</strong>
+                <span className="text-xs text-slate-500">Can feel unfair if one target blocks others.</span>
              </div>
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <strong className="text-emerald-400 block mb-2">Round-Robin</strong>
-                <span className="text-sm text-slate-400">Innately fair. Every enemy hits in turn.</span>
+             <div className="bg-slate-950/50 border border-slate-800 p-4 text-center" style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0 100%)' }}>
+                <strong className="text-emerald-500 block mb-2 uppercase tracking-widest">RR</strong>
+                <span className="text-xs text-slate-500">Innately fair. Swarm hits in synchronized turns.</span>
              </div>
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                <strong className="text-indigo-400 block mb-2">HRRN</strong>
-                <span className="text-sm text-slate-400">Prevents starvation by boosting waiting units.</span>
+             <div className="bg-slate-950/50 border border-slate-800 p-4 text-center" style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0 100%)' }}>
+                <strong className="text-indigo-500 block mb-2 uppercase tracking-widest">HRRN</strong>
+                <span className="text-xs text-slate-500">Prevents starvation by boosting tactical urgency.</span>
              </div>
           </div>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             <span className="bg-rose-500/20 text-rose-400 p-2 rounded-lg"><Sliders size={20} /></span>
-             Tune Asymmetrically
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed mb-4">
-            <strong className="text-white">HRRN:</strong> Requires choosing a good “service time” measure <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">S</code>. Use common gameplay stats (attack speed, HP, DPS) to set S. If an enemy type is overlooked, try lowering its S to raise its overall priority.
-          </p>
-          <p className="text-slate-300 font-light leading-relaxed">
-            <strong className="text-white">Round-Robin:</strong> Tuning means picking a quantum. Too large leads to FCFS-like behavior; too small makes the game feel jittery. <em className="text-slate-400 block mt-2 border-l-2 border-slate-700 pl-3">A good heuristic: a player’s single attack or dodge should fit into about one quantum to feel responsive.</em>
-          </p>
-        </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -433,62 +412,24 @@ function Guidelines() {
 function MixingPatterns() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Mixing Schedulers: Design Patterns</h2>
-        <p className="text-slate-400">Instead of committing to one algorithm, combine them to enrich gameplay dynamics.</p>
-      </div>
+      <SectionHeading title="Mixing Patterns" subtitle="Combine algorithms to enrich gameplay dynamics." />
 
       <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg"><Layers size={20} /></span>
-            Difficulty Modes
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm mb-4">
-             <li><strong className="text-white">Easy/Story Mode (FCFS):</strong> Enemies come in simple waves; the first enemy must often be dealt with before the next fully engages. <br/><span className="text-slate-500 mt-1 block">Pros: Predictable AI. Cons: A single powerful enemy can stall everything.</span></li>
-             <li><strong className="text-white">Normal Mode (Round-Robin):</strong> Enemies interleave turns, creating constant, steady pressure. <br/><span className="text-slate-500 mt-1 block">Pros: Smooth action, perceived fairness. Cons: Uniform pressure makes spike difficulty harder to implement.</span></li>
-             <li><strong className="text-white">Hard Mode (HRRN):</strong> Enemy priority adapts mid-battle, causing older/waiting foes to jump in abruptly.<br/><span className="text-slate-500 mt-1 block">Pros: Emergent &quot;smart&quot; feel. Cons: High tuning complexity.</span></li>
+        <ContentBox title="Difficulty Modes Matrix" icon={Layers} borderColor="border-cyan-500/30">
+          <ul className="space-y-4">
+             <li className="p-4 border border-slate-800 bg-slate-950/50"><strong className="text-amber-400">Easy (FCFS):</strong> Simple waves. Cons: A single powerful enemy can stall everything.</li>
+             <li className="p-4 border border-slate-800 bg-slate-950/50"><strong className="text-emerald-400">Normal (RR):</strong> Constant, steady pressure. Cons: Uniform pressure makes spike difficulty harder.</li>
+             <li className="p-4 border border-slate-800 bg-slate-950/50"><strong className="text-indigo-400">Hard (HRRN):</strong> Enemy priority adapts mid-battle. Cons: High tuning complexity.</li>
           </ul>
-        </div>
+        </ContentBox>
 
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-indigo-500/20 text-indigo-400 p-2 rounded-lg"><BrainCircuit size={20} /></span>
-            Per-Enemy-Type Schedulers
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed mb-4">
-            Assign different scheduling per enemy class or zone to tailor AI behavior to enemy roles:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                <strong className="text-rose-400 block mb-2">Melee Mobs <span className="text-xs text-rose-500/70 border border-rose-500/20 py-0.5 px-1.5 rounded ml-1">FCFS</span></strong>
-                <span className="text-sm text-slate-400">Charge the player in spawn order, acting one at a time.</span>
-             </div>
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                <strong className="text-emerald-400 block mb-2">Ranged <span className="text-xs text-emerald-500/70 border border-emerald-500/20 py-0.5 px-1.5 rounded ml-1">RR</span></strong>
-                <span className="text-sm text-slate-400">Take turns firing shots in a cycle, maintaining constant fire.</span>
-             </div>
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                <strong className="text-indigo-400 block mb-2">Boss & Minions <span className="text-xs text-indigo-500/70 border border-indigo-500/20 py-0.5 px-1.5 rounded ml-1">HRRN</span></strong>
-                <span className="text-sm text-slate-400">Alternates boss attacks and mob swarming dynamically.</span>
-             </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-rose-500/20 text-rose-400 p-2 rounded-lg"><Activity size={20} /></span>
-            Hybrid / Dynamic Switching
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed mb-4">
-            Change scheduling on-the-fly based on game state, serving as an "AI Director".
-          </p>
-          <ul className="space-y-3 text-slate-300 text-sm">
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div>Start a wave in FCFS (pick off weak foes), then mid-way switch to RR (sudden swarm pressure).</div></li>
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div>Use RR by default. If an elite enemy spawns, temporarily switch that enemy to FCFS until defeated.</div></li>
-             <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-slate-600 mt-2 shrink-0" /><div>Monitor performance: if clustered too densely, fallback to RR to calm things down.</div></li>
+        <ContentBox title="Hybrid Director AI" icon={BrainCircuit} borderColor="border-rose-500/30">
+          <p className="mb-4 text-rose-100/70">Change scheduling on-the-fly based on game state.</p>
+          <ul className="space-y-3 p-4 bg-slate-950/50 border border-rose-900/30 text-rose-200">
+             <li className="flex gap-3"><div className="w-1.5 h-1.5 bg-rose-500 mt-1.5 shrink-0" /><div>Start wave in FCFS, switch to RR at 50% health.</div></li>
+             <li className="flex gap-3"><div className="w-1.5 h-1.5 bg-rose-500 mt-1.5 shrink-0" /><div>If an Elite spawns, temporarily isolate them into FCFS.</div></li>
           </ul>
-        </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -497,53 +438,24 @@ function MixingPatterns() {
 function Scenarios() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Sample Scenarios & Behaviors</h2>
-        <p className="text-slate-400">Examples showing how emergent gameplay differs under each scheduler.</p>
-      </div>
+      <SectionHeading title="Sample Scenarios" subtitle="Simulated emergent gameplay differing by scheduler." />
 
       <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Three Goblins Arrive (1s attacks)
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm">
-             <li><strong className="text-rose-400">FCFS:</strong> Goblin 1 attacks repeatedly until dead, while others idle. Can be boring if the goblin has high HP.</li>
-             <li><strong className="text-emerald-400">Round-Robin:</strong> Each goblin gets a turn every second. The player feels constant pressure of 3 sequential attacks per cycle, creating an "equal opportunity" fight.</li>
-             <li><strong className="text-indigo-400">HRRN:</strong> Initially acts like FCFS. If one lives longer (waits more), its turn comes sooner the next cycle. Slowly shifts towards Round-Robin behavior for symmetrical units.</li>
+        <ContentBox title="Three Fighters Engaging" borderColor="border-cyan-500/30">
+          <ul className="space-y-4">
+             <li><strong className="text-amber-400">FCFS:</strong> Fighter 1 attacks until dead. Idle wingmen.</li>
+             <li><strong className="text-emerald-400">RR:</strong> Fighters take turns firing every second. Constant strafing pressure.</li>
+             <li><strong className="text-indigo-400">HRRN:</strong> Slowly shifts from FCFS to RR as wait times equalize.</li>
           </ul>
-        </div>
+        </ContentBox>
 
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Boss (HP 30, 2s attack) & Two Minions (HP 5, 1s attack)
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm">
-             <li><strong className="text-rose-400">FCFS:</strong> Boss spawns first and attacks continuously. Can be very hard as the boss monopolizes the attack slots.</li>
-             <li><strong className="text-emerald-400">Round-Robin:</strong> Boss attacks 2s, Minion1 1s, Boss 2s, Minion2 1s. Juggle constant pressure from both sources.</li>
-             <li><strong className="text-indigo-400">HRRN:</strong> Minions build up Wait Time due to the boss's 2s Service Time. Eventually, their Response Ratio overrides the boss, causing them to jump in and get an extra hit occasionally.</li>
+        <ContentBox title="Capital Ship & Escorts" borderColor="border-rose-500/30">
+          <ul className="space-y-4">
+             <li><strong className="text-amber-400">FCFS:</strong> Capital ship monopolizes execution queues.</li>
+             <li><strong className="text-emerald-400">RR:</strong> Capital ship fires main cannon, escorts fire PDLCs in sequence.</li>
+             <li><strong className="text-indigo-400">HRRN:</strong> Escorts build Wait Time, interrupting the Capital Ship to strike tactically.</li>
           </ul>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Eight Enemies, Player on a Cliff
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm">
-             <li><strong className="text-rose-400">FCFS:</strong> Enemies pile up in a queue. If one enemy lags or blocks, the entire fight grinds to a halt.</li>
-             <li><strong className="text-emerald-400">Round-Robin:</strong> 8 attacks cycle through rapidly. The player perceives a massive multi-hit rate.</li>
-             <li><strong className="text-indigo-400">HRRN:</strong> Behaves like RR. If some get killed, the survivors wait longer and gain higher priority, filling the action gap smoothly.</li>
-          </ul>
-        </div>
-
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Surprise Wave Mid-Boss
-          </h3>
-          <p className="text-slate-300 font-light leading-relaxed">
-             As the boss's health drops, fodder spawn. Under <strong className="text-emerald-400">HRRN</strong>, these fodder enemies build Wait Time while the Boss executes long attacks. This leads to emergent peaks of tension—sudden spikes where HRRN schedules a rapid barrage of low-threat enemies all at once.
-          </p>
-        </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -552,70 +464,16 @@ function Scenarios() {
 function Metrics() {
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Balancing & Playtesting Metrics</h2>
-        <p className="text-slate-400">Quantitative metrics and trade-offs for tuning AI scheduling.</p>
-      </div>
+      <SectionHeading title="Playtesting Metrics" subtitle="Quantitative metrics for AI tuning." />
 
       <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Quantitative Tracking
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm">
-             <li><strong className="text-sky-400">Difficulty Curve & Player Flow:</strong> Track retention and completion per level. High death rates at specific waves indicate difficulty spikes. Adjust spawn rates or scheduler algorithms to smooth the curve.</li>
-             <li><strong className="text-emerald-400">Fairness Metrics (Gini Coefficient):</strong> Measure hit or time-attacked distribution among enemies. A high Gini indicates unfairness (e.g., FCFS dominance). RR and HRRN lower the Gini by spreading the pressure.</li>
-             <li><strong className="text-indigo-400">Perceived Intelligence:</strong> A/B test player perception. HRRN tends to surprise players (an enemy waiting long finally attacks), increasing perceived AI skill. FCFS feels "dumb", while RR feels methodical.</li>
+        <ContentBox title="Quantitative Tracking Data" borderColor="border-cyan-500/30">
+          <ul className="space-y-4">
+             <li className="p-4 bg-slate-950/50 border border-slate-800"><strong className="text-sky-400 block mb-1">Player Flow & Retention</strong> High death rates at specific waves indicate difficulty spikes. Adjust schedulers to flatten spikes.</li>
+             <li className="p-4 bg-slate-950/50 border border-slate-800"><strong className="text-emerald-400 block mb-1">Gini Coefficient (Fairness)</strong> Measure action distribution. RR lowers Gini (high fairness). FCFS increases it.</li>
+             <li className="p-4 bg-slate-950/50 border border-slate-800"><strong className="text-indigo-400 block mb-1">Perceived Intelligence A/B</strong> HRRN surprises players, artificially inflating perceived AI complexity.</li>
           </ul>
-        </div>
-
-        <div className="pt-2">
-          <h3 className="text-xl font-semibold tracking-tight text-white mb-4">Trade-offs Summary</h3>
-          <div className="bg-slate-950/50 rounded-2xl border border-slate-800 overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-xs">
-                <tr>
-                  <th className="px-6 py-4 font-semibold">Criterion</th>
-                  <th className="px-6 py-4 font-semibold text-rose-400">FCFS</th>
-                  <th className="px-6 py-4 font-semibold text-emerald-400">Round Robin (RR)</th>
-                  <th className="px-6 py-4 font-semibold text-indigo-400">HRRN</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
-                <tr className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white">Responsiveness</td>
-                  <td className="px-6 py-4">Low (can stall)</td>
-                  <td className="px-6 py-4">High (frequent turns)</td>
-                  <td className="px-6 py-4">Medium (prevents extreme stall)</td>
-                </tr>
-                <tr className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white">Fairness</td>
-                  <td className="px-6 py-4">Low (tasks block others)</td>
-                  <td className="px-6 py-4">High (cyclic service)</td>
-                  <td className="px-6 py-4">High (balances wait/service)</td>
-                </tr>
-                <tr className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white">Perceived "Smartness"</td>
-                  <td className="px-6 py-4">Low (predictable)</td>
-                  <td className="px-6 py-4">Medium (static pattern)</td>
-                  <td className="px-6 py-4">High (dynamic priority)</td>
-                </tr>
-                <tr className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white">Complexity</td>
-                  <td className="px-6 py-4">Very low (simple queue)</td>
-                  <td className="px-6 py-4">Moderate (time-slicing)</td>
-                  <td className="px-6 py-4">Higher (manage ratios)</td>
-                </tr>
-                <tr className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white">Tuning Difficulty</td>
-                  <td className="px-6 py-4">None (spawn rate only)</td>
-                  <td className="px-6 py-4">Medium (choose quantum)</td>
-                  <td className="px-6 py-4">Medium-High (threat/service setup)</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </ContentBox>
       </div>
     </div>
   );
@@ -624,14 +482,14 @@ function Metrics() {
 function Performance() {
   const chart = `
   flowchart LR
-    classDef default fill:#0f172a,stroke:#334155,stroke-width:2px,color:#f8fafc;
-    classDef action fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
-    subgraph Scheduler
-      A[New Spawn] --> Q[(Enemy Queue)]
-      Q --> S{Scheduler Chooses}
-      S -->|FCFS| X1[Oldest Enemy]
-      S -->|RR| X2[Next Enemy]
-      S -->|HRRN| X3[Highest Ratio]
+    classDef default fill:#0f172a,stroke:#22d3ee,stroke-width:1px,color:#f8fafc;
+    classDef action fill:#082f49,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    subgraph Scheduler Process
+      A[New Spawn] --> Q[(Queue Memory)]
+      Q --> S{Alloc}
+      S -->|FCFS| X1[Index 0]
+      S -->|RR| X2[Ptr++]
+      S -->|HRRN| X3[Math.max]
       X1 --> Act[Perform Action]:::action
       X2 --> Act
       X3 --> Act
@@ -641,57 +499,34 @@ function Performance() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-semibold tracking-tight text-white mb-2">Performance & Optimization</h2>
-        <p className="text-slate-400">Strategies to maintain frame rates under heavy scheduling loads (swarms).</p>
-      </div>
+      <SectionHeading title="System Optimization" subtitle="Execution overhead & computational limits." />
 
       <div className="space-y-6">
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-            <span className="bg-amber-500/20 text-amber-400 p-2 rounded-lg"><Zap size={20} /></span>
-            Updating Many Enemies
-          </h3>
-          <ul className="space-y-4 text-slate-300 text-sm">
-             <li><strong className="text-white">Cull Offscreen:</strong> Only schedule or update enemies in the player’s vicinity. Skip or freeze distant ones.</li>
-             <li><strong className="text-white">Spawn on Demand:</strong> Use a scripted spawn queue. Create enemy objects just as they appear on-screen rather than keeping future enemies alive idly.</li>
-             <li><strong className="text-white">Batch / Flow Movement:</strong> Group far-away enemies. Compute one path for a group (e.g., flow fields) or use an ECS (Entity Component System) to process entities rapidly.</li>
-             <li><strong className="text-white">Time-Slicing:</strong> Instead of updating every enemy every frame, update only an <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">N</code> slice per frame.</li>
-          </ul>
-        </div>
+        <ContentBox title="Computational Complexity" icon={Cpu} borderColor="border-amber-500/30">
+           <div className="bg-slate-950/50 border border-slate-800 p-4">
+             <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
+                 <span className="text-amber-400 font-bold uppercase tracking-widest">FCFS</span>
+                 <code className="bg-amber-950/50 border border-amber-900/50 px-2 py-1 text-amber-200">O(1)</code>
+                 <span className="text-slate-500 text-[10px]">Pop Queue</span>
+             </div>
+             <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
+                 <span className="text-emerald-400 font-bold uppercase tracking-widest">Round-Robin</span>
+                 <code className="bg-emerald-950/50 border border-emerald-900/50 px-2 py-1 text-emerald-200">O(1)</code>
+                 <span className="text-slate-500 text-[10px]">Move Cycle</span>
+             </div>
+             <div className="flex justify-between items-center text-indigo-400 font-bold uppercase tracking-widest">
+                 <span>HRRN</span>
+                 <code className="bg-indigo-950/50 border border-indigo-900/50 px-2 py-1 text-indigo-200">O(n)</code>
+                 <span className="text-slate-500 text-[10px]">Eval Ratios</span>
+             </div>
+           </div>
+        </ContentBox>
 
-        <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-xl font-bold flex items-center gap-3 text-white mb-4">
-             Algorithm Complexity
-          </h3>
-           <ul className="space-y-3 text-slate-300 text-sm">
-             <li className="flex justify-between items-center border-b border-slate-800 pb-2">
-                 <span className="text-rose-400 font-semibold">FCFS</span>
-                 <code className="bg-slate-900 px-2 py-1 rounded text-slate-300">O(1)</code>
-                 <span className="text-slate-500">per step (pop queue head)</span>
-             </li>
-             <li className="flex justify-between items-center border-b border-slate-800 pb-2">
-                 <span className="text-emerald-400 font-semibold">Round-Robin</span>
-                 <code className="bg-slate-900 px-2 py-1 rounded text-slate-300">O(1)</code>
-                 <span className="text-slate-500">per step (move index)</span>
-             </li>
-             <li className="flex justify-between items-center pb-2">
-                 <span className="text-indigo-400 font-semibold">HRRN</span>
-                 <code className="bg-slate-900 px-2 py-1 rounded text-slate-300">O(n)</code>
-                 <span className="text-slate-500">per selection (compute ratio)</span>
-             </li>
-          </ul>
-          <p className="text-slate-400 text-xs mt-3 leading-relaxed">
-             * If <code className="text-slate-300">n</code> gets very large, HRRN can become heavy. Optimize by using a priority heap or updating ratios only when necessary.
-          </p>
-        </div>
-
-        <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 overflow-hidden">
-          <Mermaid chart={chart} />
-           <p className="text-slate-400 text-xs mt-4 leading-relaxed text-center">
-             Enemy spawns are queued. Each loop, the Scheduler selects one enemy (FCFS: oldest, RR: next in rotation, HRRN: highest ratio). That enemy acts, then yields back.
-           </p>
-        </div>
+        <ContentBox title="Pipeline Diagram" borderColor="border-cyan-500/30">
+          <div className="overflow-hidden mix-blend-screen opacity-90">
+            <Mermaid chart={chart} />
+          </div>
+        </ContentBox>
       </div>
     </div>
   );
